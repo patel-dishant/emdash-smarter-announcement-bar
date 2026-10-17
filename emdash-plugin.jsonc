@@ -1,0 +1,50 @@
+{
+	"$schema": "./node_modules/@emdash-cms/plugin-cli/schemas/emdash-plugin.schema.json",
+	"name": "Smarter Announcement Bar",
+	"slug": "smarter-announcement-bar",
+	"publisher": "did:plc:di22zvw4g3izvvjjdwkriwtv", // dishantpatel.bsky.social
+	"license": "MIT",
+	"author": {
+		"name": "Dishant Patel"
+	},
+	"security": {
+		"email": "dishant.patel1007@gmail.com"
+	},
+	// Trust contract — what runtime APIs the plugin asks for.
+	// Empty arrays mean no extra privileges beyond logging,
+	// KV, and route/hook registration. Changing these between
+	// releases requires a version bump because installed
+	// users have consented to the old contract.
+	"capabilities": [],
+	"allowedHosts": [],
+	"storage": {},
+	"admin": {
+		"pages": [
+			{
+				"path": "/dashboard",
+				"label": "Dashboard",
+				"group": "Smarter Announcement Bar"
+			},
+			{
+				"path": "/pricing",
+				"label": "Plans",
+				"group": "Smarter Announcement Bar"
+			},
+			{
+				"path": "/bar-analytics",
+				"label": "Analytics",
+				"group": "Smarter Announcement Bar"
+			},
+			{
+				"path": "/contact-form-leads",
+				"label": "Contact",
+				"group": "Smarter Announcement Bar"
+			},
+			{
+				"path": "/faqs",
+				"label": "FAQs",
+				"group": "Smarter Announcement Bar"
+			}
+		]
+	}
+}
