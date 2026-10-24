@@ -70,13 +70,43 @@ describe("admin pages", () => {
 		});
 	});
 
-	it("responds honestly to dashboard preview actions", async () => {
+	it("displays customize bar page when clicking create announcement bar", async () => {
 		host = await createPluginTestHost();
 		const createResult = await host.invokeRoute("admin", {
 			type: "block_action",
 			page: "/dashboard",
 			action_id: "create-announcement-bar",
 		});
+		expect(createResult).toMatchObject({
+			blocks: expect.arrayContaining([
+				expect.objectContaining({
+					type: "banner",
+					title: "🎉 Get 30% off your first purchase",
+				}),
+				expect.objectContaining({
+					type: "header",
+					text: "1. Customize Bar",
+				}),
+				expect.objectContaining({
+					type: "form",
+				}),
+			]),
+		});
+
+		const backResult = await host.invokeRoute("admin", {
+			type: "block_action",
+			page: "/dashboard",
+			action_id: "back-to-dashboard",
+		});
+		expect(backResult).toMatchObject({
+			blocks: expect.arrayContaining([
+				expect.objectContaining({
+					type: "banner",
+					title: "No active announcement bars",
+				}),
+			]),
+		});
+
 		const couponResult = await host.invokeRoute("admin", {
 			type: "block_action",
 			page: "/dashboard",
@@ -88,17 +118,69 @@ describe("admin pages", () => {
 			action_id: "claim-discount",
 			values: { email: "visitor@example.com" },
 		});
-
 		const exploreResult = await host.invokeRoute("admin", {
 			type: "block_action",
 			page: "/dashboard",
 			action_id: "explore-templates",
 		});
 
-		expect(createResult).toMatchObject({ toast: { message: "The announcement bar builder is coming soon.", type: "info" } });
 		expect(couponResult).toMatchObject({ toast: { message: "Preview coupon code: WELCOME20", type: "info" } });
 		expect(signupResult).toMatchObject({ toast: { message: "Email sign-up is a preview and is not connected yet.", type: "info" } });
 		expect(exploreResult).toMatchObject({ toast: { message: "Templates preview: Explore flash sales, urgency countdowns, and email captures below.", type: "info" } });
+	});
+
+	it("renders customize bar page with full builder UI matching the screenshot", async () => {
+		host = await createPluginTestHost();
+		const result = await host.invokeRoute("admin", { type: "page_load", page: "/customize-bar" });
+
+		expect(result).toMatchObject({
+			blocks: expect.arrayContaining([
+				expect.objectContaining({
+					type: "actions",
+					elements: expect.arrayContaining([
+						expect.objectContaining({ type: "link", label: "← Dashboard" }),
+						expect.objectContaining({ type: "button", action_id: "tab-customize-bar" }),
+						expect.objectContaining({ type: "button", action_id: "publish-bar" }),
+					]),
+				}),
+				expect.objectContaining({
+					type: "banner",
+					title: "🎉 Get 30% off your first purchase",
+				}),
+				expect.objectContaining({
+					type: "header",
+					text: "1. Customize Bar",
+				}),
+				expect.objectContaining({
+					type: "form",
+				}),
+			]),
+		});
+
+		// Check publish bar action
+		const publishResult = await host.invokeRoute("admin", {
+			type: "block_action",
+			page: "/customize-bar",
+			action_id: "publish-bar",
+		});
+		expect(publishResult).toMatchObject({
+			toast: { message: "Announcement bar published successfully!", type: "success" },
+		});
+
+		// Check next button form submit
+		const nextResult = await host.invokeRoute("admin", {
+			type: "form_submit",
+			page: "/customize-bar",
+			action_id: "customize-bar-next",
+			values: {
+				bar_name: "Smarter Announcement Bar",
+				position: "top",
+				bar_text: "Get 30% off your first purchase",
+			},
+		});
+		expect(nextResult).toMatchObject({
+			toast: { message: "Step 1 configuration saved! Proceeding to Customize Design.", type: "success" },
+		});
 	});
 
 	it("keeps the other plugin pages clearly marked as in development", async () => {
