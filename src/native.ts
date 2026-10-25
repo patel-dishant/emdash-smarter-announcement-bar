@@ -57,7 +57,27 @@ export interface BarConfig {
 	showCouponWhen?: "rightaway" | "claims_it" | "after_click" | string;
 	couponBarText?: string;
 	couponCode?: string;
-	copiedTooltipText?: string;
+	closeButtonColor?: string;
+	backgroundType?: "color" | "gradient" | "image";
+	backgroundGradient?: string;
+	gradientStartColor?: string;
+	gradientEndColor?: string;
+	gradientDirection?: string;
+	backgroundImage?: string;
+	fontFamily?: string;
+	fontSizePx?: number;
+	mobileFontSizePx?: number;
+	textAlign?: "left" | "center" | "right";
+	buttonPositionRelative?: boolean;
+	buttonFontSizePx?: number;
+	buttonPaddingTopBottom?: number;
+	buttonPaddingLeftRight?: number;
+	buttonBorderRadius?: number;
+	buttonBorderStyle?: "none" | "solid" | "dashed" | "dotted" | "double";
+	buttonBorderColor?: string;
+	buttonBorderWidth?: number;
+	buttonMobileFontSizePx?: number;
+	customCss?: string;
 	backgroundColor: string;
 	textColor: string;
 	buttonBackgroundColor: string;
@@ -103,6 +123,27 @@ const DEFAULT_CONFIG: BarConfig = {
 	leadEmailSubject: "New lead from my announcement bar from {name} on {date} {hours}",
 	discountEnabled: false,
 	discountCode: "SAVE30",
+	closeButtonColor: "#000000",
+	backgroundType: "color",
+	backgroundGradient: "linear-gradient(90deg, #84cc16 0%, #38bdf8 100%)",
+	gradientStartColor: "#84cc16",
+	gradientEndColor: "#38bdf8",
+	gradientDirection: "90deg",
+	backgroundImage: "",
+	fontFamily: "Arial",
+	fontSizePx: 16,
+	mobileFontSizePx: 12,
+	textAlign: "center",
+	buttonPositionRelative: false,
+	buttonFontSizePx: 16,
+	buttonPaddingTopBottom: 5,
+	buttonPaddingLeftRight: 12,
+	buttonBorderRadius: 1,
+	buttonBorderStyle: "none",
+	buttonBorderColor: "#000000",
+	buttonBorderWidth: 1,
+	buttonMobileFontSizePx: 12,
+	customCss: ".smarter-annoucement-bar-front-container.smarter-annoucement-bar-form-wrapper.smarter-annoucement-bar-modal-content",
 	backgroundColor: "#84cc16",
 	textColor: "#000000",
 	buttonBackgroundColor: "#000000",
@@ -278,12 +319,16 @@ export function renderPublicBar(config: BarConfig): string {
 
 	const buttonDeviceClass = (!hasButtonDesktop && hasButtonMobile) ? "hide-on-desktop" : (hasButtonDesktop && !hasButtonMobile) ? "hide-on-mobile" : (!hasButtonDesktop && !hasButtonMobile) ? "hide-always" : "";
 
+	const isButtonInline = Boolean(config.buttonPositionRelative);
+	const btnBorder = (config.buttonBorderStyle && config.buttonBorderStyle !== "none")
+		? `${config.buttonBorderWidth || 1}px ${config.buttonBorderStyle} ${config.buttonBorderColor || "#000000"}`
+		: "none";
 	const buttonHtml = (!showDiscountRightaway && isButtonActive)
 		? `<button type="button" class="smarter-cta-btn ${effectClass} ${buttonDeviceClass}" style="background-color: ${
 				config.buttonBackgroundColor || "#000000"
 		  }; color: ${
 				config.buttonTextColor || "#ffffff"
-		  }; border: none; border-radius: 6px; padding: 6px 14px; font-weight: 600; font-size: 13px; cursor: pointer;" onclick="handleSmarterBarCta_${barIdClean}()">${
+		  }; border: ${btnBorder}; border-radius: ${config.buttonBorderRadius ?? 1}px; padding: ${config.buttonPaddingTopBottom ?? 5}px ${config.buttonPaddingLeftRight ?? 12}px; font-weight: 600; font-size: ${config.buttonFontSizePx ?? 16}px; cursor: pointer; ${isButtonInline ? "margin-left: 12px;" : ""}" onclick="handleSmarterBarCta_${barIdClean}()">${
 				config.buttonText
 		  }</button>`
 		: "";
@@ -293,7 +338,7 @@ export function renderPublicBar(config: BarConfig): string {
 	const closeDeviceClass = (!hasCloseDesktop && hasCloseMobile) ? "hide-on-desktop" : (hasCloseDesktop && !hasCloseMobile) ? "hide-on-mobile" : (!hasCloseDesktop && !hasCloseMobile) ? "hide-always" : "";
 
 	const closeHtml = `
-		<button type="button" class="smarter-close-btn ${closeDeviceClass}" style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px 8px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;" onclick="dismissSmarterBar_${barIdClean}()" aria-label="Close announcement bar">
+		<button type="button" class="smarter-close-btn ${closeDeviceClass}" style="background: none; border: none; color: ${config.closeButtonColor || config.textColor || "inherit"}; cursor: pointer; padding: 4px 8px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;" onclick="dismissSmarterBar_${barIdClean}()" aria-label="Close announcement bar">
 			<svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor" style="display: block;"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
 		</button>
 	`;
@@ -528,11 +573,26 @@ export function renderPublicBar(config: BarConfig): string {
 			justify-content: flex-start;
 			white-space: nowrap;
 		}
+		.smarter-content-container {
+			display: flex;
+			align-items: center;
+			justify-content: ${config.textAlign === "left" ? "flex-start" : config.textAlign === "right" ? "flex-end" : "center"};
+			text-align: ${config.textAlign || "center"};
+			flex: 1;
+			overflow: hidden;
+		}
+		${config.customCss ? config.customCss : ""}
 		.smarter-announcement-bar-root {
 			width: 100%;
-			background-color: ${config.backgroundColor || "#84cc16"};
+			background: ${
+				config.backgroundType === "gradient"
+					? (config.backgroundGradient || `linear-gradient(${config.gradientDirection || "90deg"}, ${config.gradientStartColor || config.backgroundColor || "#84cc16"} 0%, ${config.gradientEndColor || "#38bdf8"} 100%)`)
+					: config.backgroundType === "image" && config.backgroundImage
+					? `url("${config.backgroundImage}") center/cover no-repeat`
+					: (config.backgroundColor || "#84cc16")
+			};
 			color: ${config.textColor || "#000000"};
-			font-size: ${fontSize};
+			font-size: ${config.fontSizePx ? `${config.fontSizePx}px` : fontSize};
 			padding: ${pad};
 			box-sizing: border-box;
 			display: flex;
@@ -540,7 +600,7 @@ export function renderPublicBar(config: BarConfig): string {
 			justify-content: space-between;
 			gap: 12px;
 			position: relative;
-			font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			font-family: ${config.fontFamily ? `${config.fontFamily}, sans-serif` : "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"};
 		}
 		.smarter-announcement-bar-root.is-bottom {
 			box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
@@ -558,6 +618,10 @@ export function renderPublicBar(config: BarConfig): string {
 				flex-direction: column;
 				text-align: center;
 				gap: 8px;
+				font-size: ${config.mobileFontSizePx ? `${config.mobileFontSizePx}px` : "12px"};
+			}
+			.smarter-cta-btn {
+				font-size: ${config.buttonMobileFontSizePx ? `${config.buttonMobileFontSizePx}px` : "12px"} !important;
 			}
 		}
 		.smarter-countdown-root {
@@ -613,12 +677,13 @@ export function renderPublicBar(config: BarConfig): string {
 			letter-spacing: -0.2px;
 		}
 	</style>
-	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"}" data-bar-id="${barIdClean}">
+	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"} smarter-annoucement-bar-front-container" data-bar-id="${barIdClean}">
 		${
 			showDiscountRightaway
 				? `<div class="smarter-content-container is-static">
 						<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${anyConfig.couponBarText || "Click to copy your coupon"}</span>
 						${discountHtml}
+						${isButtonInline ? buttonHtml : ""}
 				   </div>`
 				: isMarquee
 				? `<div class="smarter-content-container is-marquee">
@@ -639,11 +704,12 @@ export function renderPublicBar(config: BarConfig): string {
 						${isIconRight ? iconHtml : ""}
 						${discountHtml}
 						${leadFormHtml}
+						${isButtonInline ? buttonHtml : ""}
 				   </div>`
 		}
 		<div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
 			${countdownHtml}
-			${buttonHtml}
+			${isButtonInline ? "" : buttonHtml}
 			${closeHtml}
 		</div>
 	</div>

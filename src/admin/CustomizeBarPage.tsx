@@ -95,10 +95,31 @@ export interface BarConfig {
 	discountText: string;
 
 	// Step 2: Customize Design
+	closeButtonColor?: string;
+	backgroundType?: "color" | "gradient" | "image";
+	backgroundGradient?: string;
+	gradientStartColor?: string;
+	gradientEndColor?: string;
+	gradientDirection?: string;
+	backgroundImage?: string;
 	backgroundColor: string;
 	textColor: string;
+	fontFamily?: string;
+	fontSizePx?: number;
+	mobileFontSizePx?: number;
+	textAlign?: "left" | "center" | "right";
+	buttonPositionRelative?: boolean;
+	buttonFontSizePx?: number;
+	buttonPaddingTopBottom?: number;
+	buttonPaddingLeftRight?: number;
+	buttonBorderRadius?: number;
+	buttonBorderStyle?: "none" | "solid" | "dashed" | "dotted" | "double";
+	buttonBorderColor?: string;
+	buttonBorderWidth?: number;
+	buttonMobileFontSizePx?: number;
 	buttonBackgroundColor: string;
 	buttonTextColor: string;
+	customCss?: string;
 	fontSize: "sm" | "base" | "lg";
 	padding: "compact" | "normal" | "spacious";
 
@@ -164,10 +185,31 @@ const DEFAULT_CONFIG: BarConfig = {
 	couponBarText: "Click to copy your coupon",
 	copiedTooltipText: "copied",
 	discountText: "Click to copy your coupon",
+	closeButtonColor: "#000000",
+	backgroundType: "color",
+	backgroundGradient: "linear-gradient(90deg, #8ce99a 0%, #38bdf8 100%)",
+	gradientStartColor: "#8ce99a",
+	gradientEndColor: "#38bdf8",
+	gradientDirection: "90deg",
+	backgroundImage: "",
 	backgroundColor: "#8ce99a",
 	textColor: "#000000",
+	fontFamily: "Arial",
+	fontSizePx: 16,
+	mobileFontSizePx: 12,
+	textAlign: "center",
+	buttonPositionRelative: false,
+	buttonFontSizePx: 16,
+	buttonPaddingTopBottom: 5,
+	buttonPaddingLeftRight: 12,
+	buttonBorderRadius: 1,
+	buttonBorderStyle: "none",
+	buttonBorderColor: "#000000",
+	buttonBorderWidth: 1,
+	buttonMobileFontSizePx: 12,
 	buttonBackgroundColor: "#000000",
 	buttonTextColor: "#ffffff",
+	customCss: ".smarter-annoucement-bar-front-container.smarter-annoucement-bar-form-wrapper.smarter-annoucement-bar-modal-content",
 	fontSize: "base",
 	padding: "normal",
 	targetPages: "all",
@@ -275,6 +317,72 @@ function HelpTooltip({ content, style }: { content: React.ReactNode; style?: Rea
 				<span className="custom-help-tooltip-content">{content}</span>
 			</span>
 		</span>
+	);
+}
+
+/**
+ * Reusable Circular Color Picker Swatch matching Step 2 design
+ */
+function ColorCirclePicker({
+	id,
+	color,
+	onChange,
+	size = 32,
+}: {
+	id?: string;
+	color: string;
+	onChange: (newColor: string) => void;
+	size?: number;
+}) {
+	const isLight =
+		!color ||
+		color.toLowerCase() === "#ffffff" ||
+		color.toLowerCase() === "#fff" ||
+		color.toLowerCase() === "transparent";
+
+	return (
+		<div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+			<label
+				htmlFor={id}
+				style={{
+					display: "inline-block",
+					width: `${size}px`,
+					height: `${size}px`,
+					borderRadius: "50%",
+					backgroundColor: color || "#000000",
+					border: isLight ? "1px solid #cbd5e1" : "1px solid rgba(0, 0, 0, 0.15)",
+					boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
+					cursor: "pointer",
+					position: "relative",
+					overflow: "hidden",
+					flexShrink: 0,
+					transition: "transform 0.15s ease, box-shadow 0.15s ease",
+				}}
+				title={`Click to pick color (current: ${color || "#000000"})`}
+			>
+				<input
+					id={id}
+					type="color"
+					value={
+						color && color.startsWith("#") && (color.length === 7 || color.length === 4)
+							? color
+							: "#000000"
+					}
+					onChange={(e) => onChange(e.target.value)}
+					style={{
+						position: "absolute",
+						top: "-10px",
+						left: "-10px",
+						width: "60px",
+						height: "60px",
+						opacity: 0,
+						cursor: "pointer",
+						border: "none",
+						padding: 0,
+					}}
+				/>
+			</label>
+		</div>
 	);
 }
 
@@ -487,6 +595,102 @@ export function CustomizeBarPage() {
 					boxShadow: isBadge ? "0 1px 3px rgba(0,0,0,0.3)" : undefined,
 				}}
 			/>
+		);
+	};
+
+	const renderPreviewCtaButton = () => {
+		if (previewThankYouShown || isCouponRevealed || !config.buttonDevices.includes(previewDevice) || !config.buttonText) {
+			return null;
+		}
+		const btnStyle: React.CSSProperties = {
+			backgroundColor: config.buttonBackgroundColor || "#000000",
+			color: config.buttonTextColor || "#ffffff",
+			fontSize: previewDevice === "mobile" ? `${config.buttonMobileFontSizePx ?? 12}px` : `${config.buttonFontSizePx ?? 16}px`,
+			padding: `${config.buttonPaddingTopBottom ?? 5}px ${config.buttonPaddingLeftRight ?? 12}px`,
+			borderRadius: `${config.buttonBorderRadius ?? 1}px`,
+			border:
+				config.buttonBorderStyle && config.buttonBorderStyle !== "none"
+					? `${config.buttonBorderWidth || 1}px ${config.buttonBorderStyle} ${config.buttonBorderColor || "#000000"}`
+					: "none",
+			cursor: "pointer",
+			whiteSpace: "nowrap",
+			lineHeight: 1.3,
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			marginLeft: config.buttonPositionRelative ? "12px" : "0",
+		};
+
+		return (
+			<button
+				id="preview-cta-btn"
+				type="button"
+				className={`preview-cta-btn effect-${config.attentionEffect}`}
+				style={btnStyle}
+				onClick={() => {
+					if (config.leadFormEnabled) {
+						const emailInput = document.getElementById("preview-lead-email-input") as HTMLInputElement | null;
+						const nameInput = document.getElementById("preview-lead-name-input") as HTMLInputElement | null;
+						if (emailInput && !emailInput.checkValidity()) {
+							emailInput.reportValidity();
+							return;
+						}
+						const isClaimsIt = Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway");
+						if (isClaimsIt) {
+							setPreviewCouponShown(true);
+							setToast({
+								message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
+								type: "success",
+							});
+							return;
+						} else {
+							setPreviewDismissed(true);
+							setToast({
+								message: "Contact lead submitted. Announcement bar closed automatically.",
+								type: "info",
+							});
+							if (nameInput) nameInput.value = "";
+							if (emailInput) emailInput.value = "";
+							return;
+						}
+					}
+					if (config.discountEnabled && config.showCouponWhen !== "rightaway") {
+						setPreviewCouponShown(true);
+						setToast({
+							message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
+							type: "success",
+						});
+						return;
+					}
+					if (config.actionOnClick === "close") {
+						setPreviewDismissed(true);
+					} else if (config.actionOnClick === "open_url") {
+						setToast({
+							message: `Preview action: Opening ${config.buttonUrl || "URL"} in new tab`,
+							type: "info",
+						});
+						if (config.buttonUrl) {
+							let url = config.buttonUrl.trim();
+							if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+							window.open(url, "_blank", "noopener,noreferrer");
+						}
+					} else if (config.actionOnClick === "thank_you") {
+						setPreviewThankYouShown(true);
+						setToast({
+							message: "Thank you message displayed",
+							type: "success",
+						});
+					} else if (config.actionOnClick === "show_coupon" || config.actionOnClick === "copy_code") {
+						setPreviewCouponShown(true);
+						setToast({
+							message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
+							type: "success",
+						});
+					}
+				}}
+			>
+				{config.buttonText}
+			</button>
 		);
 	};
 
@@ -1851,6 +2055,95 @@ export function CustomizeBarPage() {
 				.btn-nav-prev:hover {
 					background: #f1f5f9;
 				}
+				.btn-nav-blue {
+					background: var(--primary-blue);
+					color: #ffffff;
+					border: none;
+					border-radius: 6px;
+					padding: 9px 20px;
+					font-size: 13.5px;
+					font-weight: 600;
+					cursor: pointer;
+					box-shadow: 0 1px 3px rgba(37,99,235,0.25);
+					transition: background-color 0.15s ease, transform 0.1s ease;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					gap: 6px;
+				}
+				.btn-nav-blue:hover:not(:disabled) {
+					background: var(--primary-blue-hover);
+				}
+				.btn-nav-blue:disabled {
+					opacity: 0.6;
+					cursor: not-allowed;
+				}
+
+				/* Pixel Input Box with px Addon */
+				.input-group-px {
+					display: inline-flex;
+					align-items: center;
+					border: 1px solid var(--border-card);
+					border-radius: 6px;
+					background: #ffffff;
+					height: 38px;
+					overflow: hidden;
+					box-sizing: border-box;
+					transition: border-color 0.15s ease, box-shadow 0.15s ease;
+				}
+				.input-group-px:focus-within {
+					border-color: var(--primary-blue);
+					box-shadow: 0 0 0 2px var(--primary-blue-border);
+				}
+				.input-px-field {
+					flex: 1;
+					min-width: 0;
+					width: 100%;
+					height: 100%;
+					border: none;
+					background: transparent;
+					padding: 0 10px;
+					font-size: 13px;
+					font-weight: 600;
+					color: var(--text-main);
+					outline: none;
+					box-sizing: border-box;
+				}
+				.input-addon-px {
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					padding: 0 12px;
+					background: #f1f5f9;
+					border-left: 1px solid var(--border-card);
+					font-size: 12px;
+					font-weight: 500;
+					color: var(--text-muted);
+					height: 100%;
+					user-select: none;
+				}
+
+				/* Custom CSS Textarea */
+				.custom-css-textarea {
+					width: 100%;
+					min-height: 110px;
+					border-radius: 6px;
+					border: 1px solid var(--border-card);
+					background: #ffffff;
+					padding: 10px 14px;
+					font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+					font-size: 12.5px;
+					line-height: 1.5;
+					color: var(--text-main);
+					outline: none;
+					resize: vertical;
+					box-sizing: border-box;
+					transition: border-color 0.15s ease;
+				}
+				.custom-css-textarea:focus {
+					border-color: var(--primary-blue);
+					box-shadow: 0 0 0 2px var(--primary-blue-border);
+				}
 
 				/* Toast */
 				.floating-toast {
@@ -2073,15 +2366,24 @@ export function CustomizeBarPage() {
 							)}
 
 							{!previewDismissed && config.enabled ? (
+								<>
+								{config.customCss && <style>{config.customCss}</style>}
 								<div
-									className={`announcement-bar-preview ${config.position === "bottom" ? "placement-bottom" : "placement-top"}`}
-							style={{
-								backgroundColor: config.backgroundColor,
-								color: config.textColor,
-								fontSize: config.fontSize === "sm" ? "12px" : config.fontSize === "lg" ? "16px" : "14px",
-								padding: config.padding === "compact" ? "6px 14px" : config.padding === "spacious" ? "14px 24px" : "10px 18px",
-							}}
-						>
+									className={`announcement-bar-preview ${config.position === "bottom" ? "placement-bottom" : "placement-top"} smarter-annoucement-bar-front-container`}
+									style={{
+										background:
+											config.backgroundType === "gradient"
+												? (config.backgroundGradient || `linear-gradient(${config.gradientDirection || "90deg"}, ${config.gradientStartColor || config.backgroundColor || "#8ce99a"} 0%, ${config.gradientEndColor || "#38bdf8"} 100%)`)
+												: config.backgroundType === "image" && config.backgroundImage
+												? `url("${config.backgroundImage}") center/cover no-repeat`
+												: (config.backgroundColor || "#8ce99a"),
+										color: config.textColor || "#000000",
+										fontFamily: config.fontFamily ? `${config.fontFamily}, sans-serif` : "Arial, sans-serif",
+										fontSize: previewDevice === "mobile" ? `${config.mobileFontSizePx || 12}px` : `${config.fontSizePx || 16}px`,
+										padding: config.padding === "compact" ? "6px 14px" : config.padding === "spacious" ? "14px 24px" : "10px 18px",
+										textAlign: config.textAlign || "center",
+									}}
+								>
 							{/* Content: Icon + Text (Static, Sliding, or Marquee) OR Thank You Message */}
 							{previewThankYouShown ? (
 								<div className="announcement-bar-content is-static">
@@ -2217,7 +2519,20 @@ export function CustomizeBarPage() {
 									</span>
 								</div>
 							) : (
-								<div className={`announcement-bar-content ${config.textType === "marquee" ? "is-marquee" : config.textType === "sliding" ? "is-sliding" : "is-static"}`}>
+								<div
+									className={`announcement-bar-content ${config.textType === "marquee" ? "is-marquee" : config.textType === "sliding" ? "is-sliding" : "is-static"}`}
+									style={{
+										justifyContent:
+											config.textType === "marquee"
+												? "flex-start"
+												: config.textAlign === "left"
+												? "flex-start"
+												: config.textAlign === "right"
+												? "flex-end"
+												: "center",
+										textAlign: config.textAlign || "center",
+									}}
+								>
 								{config.textType === "marquee" ? (
 									<div className="marquee-ticker-track">
 										{currentMessages.filter(Boolean).map((msg, idx, arr) => (
@@ -2337,6 +2652,8 @@ export function CustomizeBarPage() {
 												/>
 											</div>
 										)}
+										{/* If Set Position Relative To Text is enabled, render CTA button inline */}
+										{Boolean(config.buttonPositionRelative) && renderPreviewCtaButton()}
 									</>
 								)}
 							</div>
@@ -2395,89 +2712,16 @@ export function CustomizeBarPage() {
 										</div>
 									</div>
 								)}
-								{/* Show CTA Button if device enabled and not displaying thank you or revealed coupon state */}
-								{!previewThankYouShown && !isCouponRevealed && config.buttonDevices.includes(previewDevice) && config.buttonText && (
-									<button
-										id="preview-cta-btn"
-										type="button"
-										className={`preview-cta-btn effect-${config.attentionEffect}`}
-										style={{
-											backgroundColor: config.buttonBackgroundColor,
-											color: config.buttonTextColor,
-										}}
-										onClick={() => {
-											if (config.leadFormEnabled) {
-												const emailInput = document.getElementById("preview-lead-email-input") as HTMLInputElement | null;
-												const nameInput = document.getElementById("preview-lead-name-input") as HTMLInputElement | null;
-												if (emailInput && !emailInput.checkValidity()) {
-													emailInput.reportValidity();
-													return;
-												}
-												const isClaimsIt = Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway");
-												if (isClaimsIt) {
-													setPreviewCouponShown(true);
-													setToast({
-														message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
-														type: "success",
-													});
-													return;
-												} else {
-													setPreviewDismissed(true);
-													setToast({
-														message: "Contact lead submitted. Announcement bar closed automatically.",
-														type: "info",
-													});
-													if (nameInput) nameInput.value = "";
-													if (emailInput) emailInput.value = "";
-													return;
-												}
-											}
-											if (config.discountEnabled && config.showCouponWhen !== "rightaway") {
-												setPreviewCouponShown(true);
-												setToast({
-													message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
-													type: "success",
-												});
-												return;
-											}
-											if (config.actionOnClick === "close") {
-												setPreviewDismissed(true);
-											} else if (config.actionOnClick === "open_url") {
-												setToast({
-													message: `Preview action: Opening ${config.buttonUrl || "URL"} in new tab`,
-													type: "info",
-												});
-												if (config.buttonUrl) {
-													let url = config.buttonUrl.trim();
-													if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-													window.open(url, "_blank", "noopener,noreferrer");
-												}
-											} else if (config.actionOnClick === "thank_you") {
-												setPreviewThankYouShown(true);
-												setToast({
-													message: "Thank you message displayed",
-													type: "success",
-												});
-											} else if (config.actionOnClick === "show_coupon" || config.actionOnClick === "copy_code") {
-												setPreviewCouponShown(true);
-												setToast({
-													message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
-													type: "success",
-												});
-											}
-										}}
-									>
-										{config.buttonText}
-									</button>
-								)}
 
+								{/* Show CTA Button if device enabled, not inline, and not displaying thank you or revealed coupon state */}
+								{!config.buttonPositionRelative && renderPreviewCtaButton()}
 
 								{/* Show Close Icon if device enabled */}
 								{config.closeButtonDevices.includes(previewDevice) && (
 									<button
 										type="button"
 										className="preview-close-btn"
-										style={{ color: config.textColor, display: "inline-flex", alignItems: "center" }}
+										style={{ color: config.closeButtonColor || config.textColor || "#000000", display: "inline-flex", alignItems: "center" }}
 										onClick={() => {
 											setPreviewDismissed(true);
 											setPreviewThankYouShown(false);
@@ -2490,6 +2734,7 @@ export function CustomizeBarPage() {
 								)}
 							</div>
 						</div>
+						</>
 					) : (
 						<div style={{ padding: "16px", textAlign: "center", background: "#f8fafc", color: "#64748b", fontSize: "13px" }}>
 							{!config.enabled ? "Bar is currently disabled." : "Bar was dismissed in preview."}
@@ -4001,148 +4246,498 @@ export function CustomizeBarPage() {
 				{/* ======================================================== */}
 				{activeStep === 2 && (
 					<>
+						{/* Title */}
+						<h1 className="card-title blue-accent" style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 16px 0", color: "#2563eb" }}>
+							2. Customize Design
+						</h1>
+
+						{/* Card 1: Bar Settings */}
 						<div className="editor-card">
-							<h1 className="card-title blue-accent">2. Customize Design</h1>
+							<h2 className="card-title">Bar Settings</h2>
 							<p className="card-subtitle">
-								Style your announcement bar to match your brand colors, typography, and site aesthetic.
+								The Bar Setting allows you to control the bar's Position and customize the Close Icon visibility for different devices.
 							</p>
+
+							{/* Close Button Color */}
+							<div className="form-row">
+								<label className="row-label-col" htmlFor="close-button-color">
+									Close Button Color
+								</label>
+								<div className="row-control-col">
+									<ColorCirclePicker
+										id="close-button-color"
+										color={config.closeButtonColor || "#000000"}
+										onChange={(c) => update("closeButtonColor", c)}
+									/>
+								</div>
+							</div>
+
+							{/* Background */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="Choose whether the bar background uses a solid color, an attractive gradient, or a custom background image." />
+									<span>Background</span>
+								</div>
+								<div className="row-control-col">
+									<div className="option-button-group" role="radiogroup" aria-label="Background Type">
+										<button
+											type="button"
+											className={`option-pill-btn ${(!config.backgroundType || config.backgroundType === "color") ? "selected" : ""}`}
+											onClick={() => update("backgroundType", "color")}
+										>
+											<span>Color</span>
+											{(!config.backgroundType || config.backgroundType === "color") && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
+										<button
+											type="button"
+											className={`option-pill-btn ${config.backgroundType === "gradient" ? "selected" : ""}`}
+											onClick={() => update("backgroundType", "gradient")}
+										>
+											<span>Gradient</span>
+											{config.backgroundType === "gradient" && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
+										<button
+											type="button"
+											className={`option-pill-btn ${config.backgroundType === "image" ? "selected" : ""}`}
+											onClick={() => update("backgroundType", "image")}
+										>
+											<span>Image</span>
+											{config.backgroundType === "image" && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
+									</div>
+
+									{/* When Color is selected */}
+									{(!config.backgroundType || config.backgroundType === "color") && (
+										<div style={{ marginTop: "14px" }}>
+											<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Color</div>
+											<ColorCirclePicker
+												id="bar-bg-color"
+												color={config.backgroundColor || "#8ce99a"}
+												onChange={(c) => update("backgroundColor", c)}
+											/>
+										</div>
+									)}
+
+									{/* When Gradient is selected */}
+									{config.backgroundType === "gradient" && (
+										<div style={{ marginTop: "14px", display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end" }}>
+											<div>
+												<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Start Color</div>
+												<ColorCirclePicker
+													id="gradient-start-color"
+													color={config.gradientStartColor || config.backgroundColor || "#8ce99a"}
+													onChange={(c) => {
+														update("gradientStartColor", c);
+														const end = config.gradientEndColor || "#38bdf8";
+														update("backgroundGradient", `linear-gradient(${config.gradientDirection || "90deg"}, ${c} 0%, ${end} 100%)`);
+													}}
+												/>
+											</div>
+											<div>
+												<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>End Color</div>
+												<ColorCirclePicker
+													id="gradient-end-color"
+													color={config.gradientEndColor || "#38bdf8"}
+													onChange={(c) => {
+														update("gradientEndColor", c);
+														const start = config.gradientStartColor || config.backgroundColor || "#8ce99a";
+														update("backgroundGradient", `linear-gradient(${config.gradientDirection || "90deg"}, ${start} 0%, ${c} 100%)`);
+													}}
+												/>
+											</div>
+											<div>
+												<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Direction</div>
+												<select
+													className="text-field-select"
+													style={{ width: "160px" }}
+													value={config.gradientDirection || "90deg"}
+													onChange={(e) => {
+														update("gradientDirection", e.target.value);
+														const start = config.gradientStartColor || config.backgroundColor || "#8ce99a";
+														const end = config.gradientEndColor || "#38bdf8";
+														update("backgroundGradient", `linear-gradient(${e.target.value}, ${start} 0%, ${end} 100%)`);
+													}}
+												>
+													<option value="90deg">Left → Right (90°)</option>
+													<option value="180deg">Top → Bottom (180°)</option>
+													<option value="135deg">Diagonal (135°)</option>
+													<option value="45deg">Diagonal (45°)</option>
+												</select>
+											</div>
+										</div>
+									)}
+
+									{/* When Image is selected */}
+									{config.backgroundType === "image" && (
+										<div style={{ marginTop: "14px" }}>
+											<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Background Image URL</div>
+											<input
+												type="text"
+												className="text-field-input"
+												placeholder="https://example.com/banner-bg.jpg"
+												value={config.backgroundImage || ""}
+												onChange={(e) => update("backgroundImage", e.target.value)}
+											/>
+										</div>
+									)}
+								</div>
+							</div>
+						</div>
+
+						{/* Card 2: Bar Text */}
+						<div className="editor-card">
+							<h2 className="card-title">Bar Text</h2>
+							<p className="card-subtitle">
+								The Bar Text setting lets you choose between Static text (fixed in place) or Sliding text (moving text for dynamic effects).
+							</p>
+
+							{/* Color */}
+							<div className="form-row">
+								<label className="row-label-col" htmlFor="bar-text-color">
+									Color
+								</label>
+								<div className="row-control-col">
+									<ColorCirclePicker
+										id="bar-text-color"
+										color={config.textColor || "#000000"}
+										onChange={(c) => update("textColor", c)}
+									/>
+								</div>
+							</div>
+
+							{/* FontStyle (Font Family + Font Size side-by-side) */}
+							<div className="form-row">
+								<label className="row-label-col">
+									FontStyle
+								</label>
+								<div className="row-control-col" style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end" }}>
+									<div style={{ minWidth: "180px", flex: 1 }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											Font Family
+										</label>
+										<select
+											className="text-field-select"
+											value={config.fontFamily || "Arial"}
+											onChange={(e) => update("fontFamily", e.target.value)}
+										>
+											<option value="Arial">Arial</option>
+											<option value="Helvetica">Helvetica</option>
+											<option value="Inter">Inter</option>
+											<option value="Roboto">Roboto</option>
+											<option value="Georgia">Georgia</option>
+											<option value="'Times New Roman'">Times New Roman</option>
+											<option value="Tahoma">Tahoma</option>
+											<option value="'Trebuchet MS'">Trebuchet MS</option>
+											<option value="Verdana">Verdana</option>
+											<option value="system-ui">System UI</option>
+										</select>
+									</div>
+									<div style={{ width: "140px" }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											Font Size
+										</label>
+										<div className="input-group-px">
+											<input
+												type="number"
+												min={8}
+												max={48}
+												className="input-px-field"
+												value={config.fontSizePx ?? 16}
+												onChange={(e) => update("fontSizePx", parseInt(e.target.value, 10) || 16)}
+											/>
+											<span className="input-addon-px">px</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Mobile FontSize */}
+							<div className="form-row">
+								<label className="row-label-col">
+									Mobile FontSize
+								</label>
+								<div className="row-control-col">
+									<div className="input-group-px" style={{ width: "140px" }}>
+										<input
+											type="number"
+											min={8}
+											max={36}
+											className="input-px-field"
+											value={config.mobileFontSizePx ?? 12}
+											onChange={(e) => update("mobileFontSizePx", parseInt(e.target.value, 10) || 12)}
+										/>
+										<span className="input-addon-px">px</span>
+									</div>
+								</div>
+							</div>
+
+							{/* Text Alignment */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<span>Text Alignment</span>
+								</div>
+								<div className="row-control-col">
+									<div className="option-button-group" role="radiogroup" aria-label="Text Alignment">
+										{(["left", "center", "right"] as const).map((align) => (
+											<button
+												key={align}
+												type="button"
+												className={`option-pill-btn ${(config.textAlign || "center") === align ? "selected" : ""}`}
+												onClick={() => update("textAlign", align)}
+											>
+												<span style={{ textTransform: "capitalize" }}>{align}</span>
+												{(config.textAlign || "center") === align && (
+													<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+												)}
+											</button>
+										))}
+									</div>
+								</div>
+							</div>
+						</div>
+
+						{/* Card 3: Button */}
+						<div className="editor-card">
+							<h2 className="card-title">Button</h2>
+							<p className="card-subtitle">
+								The Button Setting option allows you to customize the button's appearance, behavior, and functionality for an optimized user experience.
+							</p>
+
+							{/* Set Position Relative To Text */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="When enabled, the button is positioned inline directly adjacent to the announcement text instead of docked at the far right of the bar." />
+									<span>Set Position Relative To Text</span>
+								</div>
+								<div className="row-control-col">
+									<div
+										className={`switch-track-pill ${config.buttonPositionRelative ? "on" : ""}`}
+										onClick={() => update("buttonPositionRelative", !config.buttonPositionRelative)}
+										role="switch"
+										aria-checked={Boolean(config.buttonPositionRelative)}
+										tabIndex={0}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" || e.key === " ") {
+												e.preventDefault();
+												update("buttonPositionRelative", !config.buttonPositionRelative);
+											}
+										}}
+									>
+										<span className="switch-text-inside">{config.buttonPositionRelative ? "ON" : "OFF"}</span>
+										<div className="switch-thumb-pill" />
+									</div>
+								</div>
+							</div>
+
+							{/* Button Text Style */}
+							<div className="form-row">
+								<label className="row-label-col">
+									Button Text Style
+								</label>
+								<div className="row-control-col">
+									<div style={{ width: "140px" }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											FontSize
+										</label>
+										<div className="input-group-px">
+											<input
+												type="number"
+												min={8}
+												max={36}
+												className="input-px-field"
+												value={config.buttonFontSizePx ?? 16}
+												onChange={(e) => update("buttonFontSizePx", parseInt(e.target.value, 10) || 16)}
+											/>
+											<span className="input-addon-px">px</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Padding */}
+							<div className="form-row">
+								<label className="row-label-col">
+									Padding
+								</label>
+								<div className="row-control-col" style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+									<div style={{ width: "140px" }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											Top/Bottom
+										</label>
+										<div className="input-group-px">
+											<input
+												type="number"
+												min={0}
+												max={40}
+												className="input-px-field"
+												value={config.buttonPaddingTopBottom ?? 5}
+												onChange={(e) => update("buttonPaddingTopBottom", parseInt(e.target.value, 10) || 0)}
+											/>
+											<span className="input-addon-px">px</span>
+										</div>
+									</div>
+									<div style={{ width: "140px" }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											Left/Right
+										</label>
+										<div className="input-group-px">
+											<input
+												type="number"
+												min={0}
+												max={60}
+												className="input-px-field"
+												value={config.buttonPaddingLeftRight ?? 12}
+												onChange={(e) => update("buttonPaddingLeftRight", parseInt(e.target.value, 10) || 0)}
+											/>
+											<span className="input-addon-px">px</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Border Style */}
+							<div className="form-row">
+								<label className="row-label-col">
+									Border Style
+								</label>
+								<div className="row-control-col" style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end" }}>
+									<div style={{ width: "140px" }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											Button Radius
+										</label>
+										<div className="input-group-px">
+											<input
+												type="number"
+												min={0}
+												max={50}
+												className="input-px-field"
+												value={config.buttonBorderRadius ?? 1}
+												onChange={(e) => update("buttonBorderRadius", parseInt(e.target.value, 10) || 0)}
+											/>
+											<span className="input-addon-px">px</span>
+										</div>
+									</div>
+									<div style={{ width: "140px" }}>
+										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+											Border Style
+										</label>
+										<select
+											className="text-field-select"
+											value={config.buttonBorderStyle || "none"}
+											onChange={(e) => update("buttonBorderStyle", e.target.value as any)}
+										>
+											<option value="none">None</option>
+											<option value="solid">Solid</option>
+											<option value="dashed">Dashed</option>
+											<option value="dotted">Dotted</option>
+											<option value="double">Double</option>
+										</select>
+									</div>
+									{config.buttonBorderStyle && config.buttonBorderStyle !== "none" && (
+										<div>
+											<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+												Border Color
+											</label>
+											<ColorCirclePicker
+												id="btn-border-color"
+												color={config.buttonBorderColor || "#000000"}
+												onChange={(c) => update("buttonBorderColor", c)}
+											/>
+										</div>
+									)}
+								</div>
+							</div>
+
+							{/* Mobile Button FontSize */}
+							<div className="form-row">
+								<label className="row-label-col">
+									Mobile Button FontSize
+								</label>
+								<div className="row-control-col">
+									<div className="input-group-px" style={{ width: "140px" }}>
+										<input
+											type="number"
+											min={8}
+											max={30}
+											className="input-px-field"
+											value={config.buttonMobileFontSizePx ?? 12}
+											onChange={(e) => update("buttonMobileFontSizePx", parseInt(e.target.value, 10) || 12)}
+										/>
+										<span className="input-addon-px">px</span>
+									</div>
+								</div>
+							</div>
 
 							{/* Background Color */}
 							<div className="form-row">
-								<label className="row-label-col" htmlFor="bg-color-picker">
-									Bar Background Color
+								<label className="row-label-col" htmlFor="btn-bg-color">
+									Background Color
 								</label>
-								<div className="row-control-col" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-									<input
-										id="bg-color-picker"
-										type="color"
-										value={config.backgroundColor}
-										onChange={(e) => update("backgroundColor", e.target.value)}
-										style={{ width: "44px", height: "40px", border: "none", cursor: "pointer", borderRadius: "6px" }}
-									/>
-									<input
-										type="text"
-										className="text-field-input"
-										style={{ width: "120px" }}
-										value={config.backgroundColor}
-										onChange={(e) => update("backgroundColor", e.target.value)}
-									/>
-								</div>
-							</div>
-
-							{/* Text Color */}
-							<div className="form-row">
-								<label className="row-label-col" htmlFor="text-color-picker">
-									Text Color
-								</label>
-								<div className="row-control-col" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-									<input
-										id="text-color-picker"
-										type="color"
-										value={config.textColor}
-										onChange={(e) => update("textColor", e.target.value)}
-										style={{ width: "44px", height: "40px", border: "none", cursor: "pointer", borderRadius: "6px" }}
-									/>
-									<input
-										type="text"
-										className="text-field-input"
-										style={{ width: "120px" }}
-										value={config.textColor}
-										onChange={(e) => update("textColor", e.target.value)}
-									/>
-								</div>
-							</div>
-
-							{/* Button Background Color */}
-							<div className="form-row">
-								<label className="row-label-col" htmlFor="btn-bg-color-picker">
-									Button Background Color
-								</label>
-								<div className="row-control-col" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-									<input
-										id="btn-bg-color-picker"
-										type="color"
-										value={config.buttonBackgroundColor}
-										onChange={(e) => update("buttonBackgroundColor", e.target.value)}
-										style={{ width: "44px", height: "40px", border: "none", cursor: "pointer", borderRadius: "6px" }}
-									/>
-									<input
-										type="text"
-										className="text-field-input"
-										style={{ width: "120px" }}
-										value={config.buttonBackgroundColor}
-										onChange={(e) => update("buttonBackgroundColor", e.target.value)}
-									/>
-								</div>
-							</div>
-
-							{/* Button Text Color */}
-							<div className="form-row">
-								<label className="row-label-col" htmlFor="btn-text-color-picker">
-									Button Text Color
-								</label>
-								<div className="row-control-col" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-									<input
-										id="btn-text-color-picker"
-										type="color"
-										value={config.buttonTextColor}
-										onChange={(e) => update("buttonTextColor", e.target.value)}
-										style={{ width: "44px", height: "40px", border: "none", cursor: "pointer", borderRadius: "6px" }}
-									/>
-									<input
-										type="text"
-										className="text-field-input"
-										style={{ width: "120px" }}
-										value={config.buttonTextColor}
-										onChange={(e) => update("buttonTextColor", e.target.value)}
-									/>
-								</div>
-							</div>
-
-							{/* Font Size */}
-							<div className="form-row">
-								<label className="row-label-col" htmlFor="font-size-select">Font Size</label>
 								<div className="row-control-col">
-									<select
-										id="font-size-select"
-										className="text-field-select"
-										value={config.fontSize}
-										onChange={(e) => update("fontSize", e.target.value as any)}
-									>
-										<option value="sm">Small (12px)</option>
-										<option value="base">Standard (14px)</option>
-										<option value="lg">Large (16px)</option>
-									</select>
+									<ColorCirclePicker
+										id="btn-bg-color"
+										color={config.buttonBackgroundColor || "#000000"}
+										onChange={(c) => update("buttonBackgroundColor", c)}
+									/>
 								</div>
 							</div>
 
-							{/* Bar Padding / Height */}
+							{/* Color (Button Text Color) */}
 							<div className="form-row">
-								<label className="row-label-col" htmlFor="bar-padding-select">Bar Padding & Height</label>
+								<label className="row-label-col" htmlFor="btn-text-color">
+									Color
+								</label>
 								<div className="row-control-col">
-									<select
-										id="bar-padding-select"
-										className="text-field-select"
-										value={config.padding}
-										onChange={(e) => update("padding", e.target.value as any)}
-									>
-										<option value="compact">Compact (Subtle)</option>
-										<option value="normal">Standard</option>
-										<option value="spacious">Spacious (Prominent)</option>
-									</select>
+									<ColorCirclePicker
+										id="btn-text-color"
+										color={config.buttonTextColor || "#ffffff"}
+										onChange={(c) => update("buttonTextColor", c)}
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Card 4: Custom Css */}
+						<div className="editor-card">
+							<h2 className="card-title">Custom Css</h2>
+							<p className="card-subtitle">
+								The Custom CSS option allows you to apply your own styles to customize the appearance and behavior of Announcement bar elements as per your needs.
+							</p>
+
+							<div className="form-row">
+								<label className="row-label-col" htmlFor="custom-css-field">
+									Css
+								</label>
+								<div className="row-control-col">
+									<textarea
+										id="custom-css-field"
+										className="custom-css-textarea"
+										rows={5}
+										value={config.customCss !== undefined ? config.customCss : ".smarter-annoucement-bar-front-container.smarter-annoucement-bar-form-wrapper.smarter-annoucement-bar-modal-content"}
+										onChange={(e) => update("customCss", e.target.value)}
+										placeholder=".smarter-annoucement-bar-front-container.smarter-annoucement-bar-form-wrapper.smarter-annoucement-bar-modal-content"
+										spellCheck={false}
+									/>
 								</div>
 							</div>
 						</div>
 
 						{/* Bottom Navigation */}
-						<div className="bottom-nav-row">
-							<button type="button" className="btn-nav-prev" onClick={() => goToStep(1)}>
-								<ArrowLeft size={16} weight="bold" />
-								<span>Previous</span>
+						<div className="bottom-nav-row" style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+							<button type="button" className="btn-nav-blue" onClick={() => goToStep(1)}>
+								<span>← Previous</span>
 							</button>
-							<button type="button" className="btn-nav-next" onClick={() => goToStep(3)}>
-								<span>Next</span>
-								<ArrowRight size={16} weight="bold" />
+							<button type="button" className="btn-nav-blue" onClick={() => goToStep(3)}>
+								<span>Next →</span>
+							</button>
+							<button type="button" className="btn-nav-blue" onClick={handlePublish} disabled={status === "publishing"}>
+								<span>{status === "publishing" ? "Saving..." : "Save Bar"}</span>
 							</button>
 						</div>
 					</>
