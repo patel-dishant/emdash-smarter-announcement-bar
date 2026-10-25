@@ -36,6 +36,10 @@ import {
 // ============================================================================
 
 export interface BarConfig {
+	id?: string;
+	views?: number;
+	clicks?: number;
+	leads?: number;
 	// Step 1: Customize Bar
 	enabled: boolean;
 	name: string;
@@ -108,6 +112,10 @@ export interface BarConfig {
 }
 
 const DEFAULT_CONFIG: BarConfig = {
+	id: "bar_1",
+	views: 0,
+	clicks: 0,
+	leads: 0,
 	enabled: true,
 	name: "Smarter Announcement Bar",
 	position: "top",
@@ -172,6 +180,7 @@ const DEFAULT_CONFIG: BarConfig = {
 
 const STORAGE_KEY_DRAFT = "emdash_smarter_bar_draft";
 const STORAGE_KEY_PUBLISHED = "emdash_smarter_bar_published";
+const STORAGE_KEY_BARS = "emdash_smarter_bars";
 
 /**
  * Official EmDash CMS icon mark (rounded rect with colorful gradient stroke and dash).
@@ -245,6 +254,30 @@ export function EmDashIcon({ size = 20, className, style }: { size?: number; cla
 	);
 }
 
+/**
+ * Reusable Information Help Tooltip for setting fields
+ */
+function HelpTooltip({ content, style }: { content: React.ReactNode; style?: React.CSSProperties }) {
+	return (
+		<span
+			className="info-tooltip-wrapper"
+			style={style}
+			onClick={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+			}}
+		>
+			<span className="blue-help-bubble" tabIndex={0} role="button" aria-label="Help information">
+				?
+			</span>
+			<span className="custom-help-tooltip" role="tooltip">
+				<span className="custom-help-tooltip-arrow" />
+				<span className="custom-help-tooltip-content">{content}</span>
+			</span>
+		</span>
+	);
+}
+
 export function CustomizeBarPage() {
 	// Navigation & step state
 	const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
@@ -262,6 +295,27 @@ export function CustomizeBarPage() {
 	// In-memory editing draft
 	const [config, setConfig] = useState<BarConfig>(() => {
 		try {
+			const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+			const barId = urlParams ? urlParams.get("id") : null;
+			if (barId === "new") {
+				return {
+					...DEFAULT_CONFIG,
+					id: `bar_${Date.now()}`,
+					name: "New Announcement Bar",
+					views: 0,
+					clicks: 0,
+					leads: 0,
+					enabled: true,
+				};
+			}
+			if (barId) {
+				const savedBars = localStorage.getItem(STORAGE_KEY_BARS);
+				if (savedBars) {
+					const list: BarConfig[] = JSON.parse(savedBars);
+					const match = list.find((b) => b.id === barId);
+					if (match) return match;
+				}
+			}
 			const savedDraft = localStorage.getItem(STORAGE_KEY_DRAFT);
 			if (savedDraft) return JSON.parse(savedDraft);
 			const published = localStorage.getItem(STORAGE_KEY_PUBLISHED);
@@ -325,21 +379,24 @@ export function CustomizeBarPage() {
 
 	// Synchronize with server published configuration on initial mount
 	useEffect(() => {
-		fetch("/_emdash/api/plugins/smarter-announcement-bar/config")
+		const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+		const barId = urlParams ? urlParams.get("id") : null;
+		if (barId === "new") return;
+
+		fetch("/_emdash/api/plugins/smarter-announcement-bar/bars")
 			.then((res) => res.json())
 			.then((data) => {
-				if (data && data.success && data.config) {
-					setConfig((prev) => {
-						const hasDraft = localStorage.getItem(STORAGE_KEY_DRAFT);
-						if (!hasDraft) {
-							return { ...DEFAULT_CONFIG, ...data.config };
+				if (data && data.success && Array.isArray(data.bars) && data.bars.length > 0) {
+					try {
+						localStorage.setItem(STORAGE_KEY_BARS, JSON.stringify(data.bars));
+					} catch {}
+					if (barId) {
+						const match = data.bars.find((b: any) => b.id === barId);
+						if (match) {
+							setConfig(match);
+							return;
 						}
-						return {
-							...prev,
-							iconPosition: prev.iconPosition || data.config.iconPosition || "left",
-							textIcon: prev.textIcon !== undefined ? prev.textIcon : (data.config.textIcon || null),
-						};
-					});
+					}
 				}
 			})
 			.catch(() => {});
@@ -355,6 +412,16 @@ export function CustomizeBarPage() {
 		setStatus("unsaved");
 		try {
 			localStorage.setItem(STORAGE_KEY_DRAFT, JSON.stringify(config));
+			// Also update draft in emdash_smarter_bars if it exists
+			const savedBarsStr = localStorage.getItem(STORAGE_KEY_BARS);
+			if (savedBarsStr) {
+				const barsList: BarConfig[] = JSON.parse(savedBarsStr);
+				const idx = barsList.findIndex((b) => b.id === config.id);
+				if (idx >= 0) {
+					barsList[idx] = { ...barsList[idx], ...config };
+					localStorage.setItem(STORAGE_KEY_BARS, JSON.stringify(barsList));
+				}
+			}
 		} catch {
 			// ignore
 		}
@@ -673,6 +740,8 @@ export function CustomizeBarPage() {
 				: currentMessages;
 			const toPublish = {
 				...config,
+				id: config.id || `bar_${Date.now()}`,
+				enabled: config.enabled ?? true,
 				messages: msgsToSave,
 				text: config.text,
 				textFormatting: {
@@ -682,20 +751,57 @@ export function CustomizeBarPage() {
 					underline: false,
 				},
 			};
+
+			// Build updated bars list first
+			let barsList: BarConfig[] = [];
+			try {
+				const savedBarsStr = localStorage.getItem(STORAGE_KEY_BARS);
+				barsList = savedBarsStr ? JSON.parse(savedBarsStr) : [];
+			} catch {}
+			const idx = barsList.findIndex((b) => (b.id && toPublish.id && b.id === toPublish.id) || b.name === toPublish.name);
+			if (idx >= 0) {
+				barsList[idx] = {
+					...toPublish,
+					views: barsList[idx].views ?? toPublish.views ?? 0,
+					clicks: barsList[idx].clicks ?? toPublish.clicks ?? 0,
+					leads: barsList[idx].leads ?? toPublish.leads ?? 0,
+				};
+			} else {
+				barsList.push({
+					...toPublish,
+					views: toPublish.views ?? 0,
+					clicks: toPublish.clicks ?? 0,
+					leads: toPublish.leads ?? 0,
+				});
+			}
+
+			// Persist to local storage
+			try {
+				localStorage.setItem(STORAGE_KEY_PUBLISHED, JSON.stringify(toPublish));
+				localStorage.setItem(STORAGE_KEY_DRAFT, JSON.stringify(toPublish));
+				localStorage.setItem(STORAGE_KEY_BARS, JSON.stringify(barsList));
+			} catch {}
+
 			// Persist to server API route so public site can render it
 			const res = await fetch("/_emdash/api/plugins/smarter-announcement-bar/publish", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(toPublish),
+				body: JSON.stringify({ bar: toPublish, bars: barsList }),
 			});
 			const resData = await res.json().catch(() => null);
 			if (!res.ok || (resData && resData.success === false)) {
 				throw new Error(resData?.error || "Server endpoint returned an error");
 			}
 
-			// Persist to local storage
-			localStorage.setItem(STORAGE_KEY_PUBLISHED, JSON.stringify(toPublish));
-			localStorage.setItem(STORAGE_KEY_DRAFT, JSON.stringify(toPublish));
+			// Also sync to bars endpoint
+			try {
+				await fetch("/_emdash/api/plugins/smarter-announcement-bar/bars", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ bars: barsList }),
+				});
+			} catch {}
+
 			setConfig(toPublish);
 			setStatus("published");
 			setToast({ message: "Announcement bar published successfully to your website!", type: "success" });
@@ -1610,9 +1716,20 @@ export function CustomizeBarPage() {
 				.switch-track-pill.on .switch-thumb-pill {
 					transform: translateX(26px);
 				}
+				/* Help Tooltip Component */
+				.info-tooltip-wrapper {
+					position: relative;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					vertical-align: middle;
+					flex-shrink: 0;
+					cursor: help;
+					user-select: none;
+				}
 				.blue-help-bubble {
-					width: 16px;
-					height: 16px;
+					width: 17px;
+					height: 17px;
 					border-radius: 50%;
 					background: #3b82f6;
 					color: #ffffff;
@@ -1621,8 +1738,67 @@ export function CustomizeBarPage() {
 					justify-content: center;
 					font-size: 11px;
 					font-weight: 700;
+					font-family: inherit;
 					flex-shrink: 0;
+					line-height: 1;
 					cursor: help;
+					transition: background 0.15s ease, transform 0.15s ease;
+					box-shadow: 0 1px 2px rgba(59, 130, 246, 0.25);
+				}
+				.info-tooltip-wrapper:hover .blue-help-bubble,
+				.info-tooltip-wrapper:focus-within .blue-help-bubble {
+					background: #2563eb;
+					transform: scale(1.08);
+				}
+				.custom-help-tooltip {
+					position: absolute;
+					bottom: calc(100% + 9px);
+					left: -12px;
+					width: max-content;
+					max-width: 420px;
+					background: #d8ebfe;
+					color: #374151;
+					font-size: 13.5px;
+					font-weight: 500;
+					line-height: 1.55;
+					padding: 14px 18px;
+					border-radius: 8px;
+					box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+					pointer-events: none;
+					opacity: 0;
+					visibility: hidden;
+					transform: translateY(4px);
+					transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.18s ease;
+					z-index: 99999;
+					text-align: left;
+					white-space: normal;
+					cursor: default;
+				}
+				.info-tooltip-wrapper:hover .custom-help-tooltip,
+				.info-tooltip-wrapper:focus-within .custom-help-tooltip {
+					opacity: 1;
+					visibility: visible;
+					transform: translateY(0);
+				}
+				.custom-help-tooltip-arrow {
+					position: absolute;
+					top: 100%;
+					left: 20px;
+					transform: translateX(-50%);
+					width: 0;
+					height: 0;
+					border-left: 7px solid transparent;
+					border-right: 7px solid transparent;
+					border-top: 8px solid #d8ebfe;
+				}
+				@media (max-width: 640px) {
+					.custom-help-tooltip {
+						left: -8px;
+						max-width: calc(100vw - 48px);
+					}
+					.custom-help-tooltip-arrow {
+						left: 16px;
+					}
 				}
 
 				/* Feature Card Expanded Settings */
@@ -2435,8 +2611,8 @@ export function CustomizeBarPage() {
 							{/* Row: Position */}
 							<div className="form-row">
 								<div className="row-label-col">
+									<HelpTooltip content="Choose whether the announcement bar stays fixed at the top or bottom of your website." />
 									<span>Position</span>
-									<span title="Placement of the announcement bar" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="radiogroup" aria-label="Position">
@@ -2467,8 +2643,8 @@ export function CustomizeBarPage() {
 							{/* Row: Show Close Button */}
 							<div className="form-row">
 								<div className="row-label-col">
+									<HelpTooltip content="Choose which devices display the dismiss 'X' button so visitors can close the bar." />
 									<span>Show Close Button</span>
-									<span title="Show dismiss 'X' icon on specific devices" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="group" aria-label="Show Close Button">
@@ -2505,8 +2681,8 @@ export function CustomizeBarPage() {
 							{/* Row: Text Type */}
 							<div className="form-row">
 								<div className="row-label-col">
+									<HelpTooltip content="Choose Static (single fixed message), Sliding (rotates multiple messages with animation), or Marquee (continuously scrolling text)." />
 									<span>Text Type</span>
-									<span title="Choose Static (fixed in place), Sliding (slides in one time and stays), or Marquee (slides continuously)" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="radiogroup" aria-label="Text Type">
@@ -2674,8 +2850,8 @@ export function CustomizeBarPage() {
 									{/* Row: Text Icon */}
 									<div className="form-row">
 										<div className="row-label-col">
+											<HelpTooltip content="Optional icon or graphic to display alongside your announcement text for added visual appeal." />
 											<span>Text Icon</span>
-											<span title="Optional icon to display next to your announcement" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 										</div>
 										<div className="row-control-col">
 											<div
@@ -2774,8 +2950,8 @@ export function CustomizeBarPage() {
 									{/* Row: Icon Position */}
 									<div className="form-row">
 										<div className="row-label-col">
+											<HelpTooltip content="Choose whether the icon appears to the left or right of your announcement text." />
 											<span>Icon Position</span>
-											<span title="Choose whether to place the icon on the left or right of your announcement text" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 										</div>
 										<div className="row-control-col">
 											<div className="option-button-group" role="radiogroup" aria-label="Icon Position">
@@ -2811,8 +2987,8 @@ export function CustomizeBarPage() {
 									{/* Row: Icon Style / Contrast */}
 									<div className="form-row">
 										<div className="row-label-col">
+											<HelpTooltip content="Adjust icon appearance for high visibility on dark or light announcement bars." />
 											<span>Icon Style</span>
-											<span title="Adjust icon appearance for high visibility on dark or light announcement bars" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 										</div>
 										<div className="row-control-col">
 											<div className="option-button-group" role="radiogroup" aria-label="Icon Style">
@@ -2932,8 +3108,8 @@ export function CustomizeBarPage() {
 									{/* Row: Show Button */}
 							<div className="form-row">
 								<div className="row-label-col">
+									<HelpTooltip content="Choose whether to show the call-to-action button on desktop, mobile, or both." />
 									<span>Show Button</span>
-									<span title="Display call-to-action button on specific devices" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="group" aria-label="Show CTA Button">
@@ -3017,8 +3193,8 @@ export function CustomizeBarPage() {
 							{/* Row: Action On Click */}
 							<div className="form-row">
 								<label className="row-label-col" htmlFor="action-on-click-select">
+									<HelpTooltip content="What occurs when a visitor clicks the call-to-action button, such as redirecting to a URL or closing the bar." />
 									<span>Action On Click</span>
-									<span title="What occurs when visitor clicks the CTA button" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</label>
 								<div className="row-control-col">
 									<select
@@ -3161,8 +3337,8 @@ export function CustomizeBarPage() {
 							{/* Row: Bar Appearance After Button Click */}
 							<div className="form-row">
 								<label className="row-label-col" htmlFor="appearance-after-click-select">
+									<HelpTooltip content='Choose bar display settings after a visitor click on the button. The "Don’t show the Bar again for the user" option is the preferable option if you don’t want to annoy your visitors by showing the bar over and over' />
 									<span>Bar Appearance After Button Click</span>
-									<span title="Persistent visibility behavior after button click" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</label>
 								<div className="row-control-col">
 									<select
@@ -3224,7 +3400,7 @@ export function CustomizeBarPage() {
 									{/* Row 1: Specific End Date & Time */}
 									<div className="form-row">
 										<label className="row-label-col" htmlFor="countdown-target" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
-											<span className="blue-help-bubble" title="Specify the deadline date and time for the countdown timer">?</span>
+											<HelpTooltip content="Specify the target deadline date and time for the countdown timer. When reached, the timer expires." />
 											<span>Specific End Date & Time</span>
 										</label>
 										<div className="row-control-col">
@@ -3488,7 +3664,7 @@ export function CustomizeBarPage() {
 											{/* Row 4: Email address */}
 											<div className="form-row">
 												<label className="row-label-col" htmlFor="lead-recipient-email" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
-													<span className="blue-help-bubble" title="Email address to receive collected leads">?</span>
+													<HelpTooltip content="Enter the recipient email address where notifications and collected leads will be delivered." />
 													<span>Email address</span>
 												</label>
 												<div className="row-control-col">
@@ -3507,7 +3683,7 @@ export function CustomizeBarPage() {
 											{/* Row 5: Sender's name */}
 											<div className="form-row">
 												<label className="row-label-col" htmlFor="lead-sender-name" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
-													<span className="blue-help-bubble" title="Sender name template for notification emails">?</span>
+													<HelpTooltip content="Sender display name shown in lead notification emails sent to your inbox." />
 													<span>Sender's name</span>
 												</label>
 												<div className="row-control-col">
@@ -3526,7 +3702,7 @@ export function CustomizeBarPage() {
 											{/* Row 6: Email subject */}
 											<div className="form-row">
 												<label className="row-label-col" htmlFor="lead-email-subject" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
-													<span className="blue-help-bubble" title="Subject line for lead notification email">?</span>
+													<HelpTooltip content="Subject line for lead notification emails. You can include {name}, {email}, {date}, and {hours} dynamic tags." />
 													<span>Email subject</span>
 												</label>
 												<div className="row-control-col">
@@ -3627,7 +3803,7 @@ export function CustomizeBarPage() {
 									{/* Row 1: Show Coupon When */}
 									<div className="form-row">
 										<label className="row-label-col" htmlFor="show-coupon-when" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-											<span className="blue-help-bubble">?</span>
+											<HelpTooltip content="Choose whether the coupon code is visible right away or only reveals after the visitor claims it by clicking the CTA button." />
 											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Show Coupon When</span>
 										</label>
 										<div className="row-control-col">
@@ -3679,7 +3855,7 @@ export function CustomizeBarPage() {
 									{/* Row 2: Coupon Code */}
 									<div className="form-row">
 										<label className="row-label-col" htmlFor="discount-code" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-											<span className="blue-help-bubble">?</span>
+											<HelpTooltip content="The promo or discount code that visitors can copy directly to their clipboard with one click." />
 											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Coupon Code</span>
 										</label>
 										<div className="row-control-col">
@@ -3698,7 +3874,7 @@ export function CustomizeBarPage() {
 									{/* Row 3: Coupon Bar Text */}
 									<div className="form-row">
 										<label className="row-label-col" htmlFor="coupon-bar-text" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-											<span className="blue-help-bubble">?</span>
+											<HelpTooltip content="The text shown inside the coupon badge on the announcement bar, guiding visitors to click and copy the discount." />
 											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Coupon Bar Text</span>
 										</label>
 										<div className="row-control-col">
@@ -3787,7 +3963,7 @@ export function CustomizeBarPage() {
 									{/* Row 4: Copied Tooltip Text */}
 									<div className="form-row">
 										<label className="row-label-col" htmlFor="copied-tooltip-text" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-											<span className="blue-help-bubble">?</span>
+											<HelpTooltip content='The confirmation message shown in a bubble immediately after a visitor copies the coupon code (e.g. "copied").' />
 											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Copied Tooltip Text</span>
 										</label>
 										<div className="row-control-col">
@@ -3986,7 +4162,8 @@ export function CustomizeBarPage() {
 							{/* Target Pages */}
 							<div className="form-row">
 								<label className="row-label-col" htmlFor="target-pages-select">
-									Target Pages
+									<HelpTooltip content="Select which pages across your website will display this announcement bar." />
+									<span>Target Pages</span>
 								</label>
 								<div className="row-control-col">
 									<select
@@ -4017,7 +4194,10 @@ export function CustomizeBarPage() {
 
 							{/* Target Devices */}
 							<div className="form-row">
-								<label className="row-label-col" htmlFor="target-devices-select">Target Devices</label>
+								<label className="row-label-col" htmlFor="target-devices-select">
+									<HelpTooltip content="Control whether to show the bar on all devices, desktop computers only, or mobile devices only." />
+									<span>Target Devices</span>
+								</label>
 								<div className="row-control-col">
 									<select
 										id="target-devices-select"
@@ -4034,7 +4214,10 @@ export function CustomizeBarPage() {
 
 							{/* Target Visitors */}
 							<div className="form-row">
-								<label className="row-label-col" htmlFor="target-visitors-select">Visitor Eligibility</label>
+								<label className="row-label-col" htmlFor="target-visitors-select">
+									<HelpTooltip content="Choose whether all visitors see the bar, first-time new visitors only, or returning visitors only." />
+									<span>Visitor Eligibility</span>
+								</label>
 								<div className="row-control-col">
 									<select
 										id="target-visitors-select"
@@ -4051,7 +4234,10 @@ export function CustomizeBarPage() {
 
 							{/* Schedule Start / End */}
 							<div className="form-row">
-								<label className="row-label-col">Schedule Window</label>
+								<label className="row-label-col">
+									<HelpTooltip content="Optionally schedule start and end dates to automatically publish and unpublish the announcement bar." />
+									<span>Schedule Window</span>
+								</label>
 								<div className="row-control-col" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
 									<div style={{ flex: 1, minWidth: "180px" }}>
 										<label htmlFor="schedule-start" style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>

@@ -5,8 +5,13 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const configFile = resolve(__dirname, "..", "published-bar.json");
+const barsConfigFile = resolve(__dirname, "..", "published-bars.json");
 
 export interface BarConfig {
+	id?: string;
+	views?: number;
+	clicks?: number;
+	leads?: number;
 	enabled: boolean;
 	name: string;
 	position: "top" | "bottom";
@@ -62,6 +67,10 @@ export interface BarConfig {
 }
 
 const DEFAULT_CONFIG: BarConfig = {
+	id: "bar_1",
+	views: 0,
+	clicks: 0,
+	leads: 0,
 	enabled: true,
 	name: "Smarter Announcement Bar",
 	position: "top",
@@ -102,21 +111,76 @@ const DEFAULT_CONFIG: BarConfig = {
 	padding: "normal",
 };
 
-export function getPublishedConfig(): BarConfig {
+export function getPublishedBars(): BarConfig[] {
+	try {
+		if (existsSync(barsConfigFile)) {
+			const data = readFileSync(barsConfigFile, "utf-8");
+			const parsed = JSON.parse(data);
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				return parsed;
+			}
+		}
+	} catch {
+		// ignore
+	}
 	try {
 		if (existsSync(configFile)) {
 			const data = readFileSync(configFile, "utf-8");
-			return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+			const single = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+			if (!single.id) single.id = "bar_1";
+			if (single.views === undefined) single.views = 0;
+			if (single.clicks === undefined) single.clicks = 0;
+			if (single.leads === undefined) single.leads = 0;
+			return [single];
 		}
 	} catch {
-		// fallback to default
+		// ignore
 	}
-	return DEFAULT_CONFIG;
+	return [{ ...DEFAULT_CONFIG, id: "bar_1", views: 0, clicks: 0, leads: 0 }];
+}
+
+export function savePublishedBars(bars: BarConfig[]): void {
+	try {
+		writeFileSync(barsConfigFile, JSON.stringify(bars, null, 2), "utf-8");
+		const anyEnabled = bars.find((b) => b && b.enabled);
+		const activeBar = anyEnabled
+			? anyEnabled
+			: { ...(bars[0] || DEFAULT_CONFIG), enabled: false };
+		writeFileSync(configFile, JSON.stringify(activeBar, null, 2), "utf-8");
+	} catch (err) {
+		console.error("Failed to write published-bars.json:", err);
+	}
+}
+
+export function getPublishedConfig(): BarConfig {
+	const bars = getPublishedBars();
+	const active = bars.find((b) => b && b.enabled);
+	if (!active) {
+		const fallback = bars[0] || DEFAULT_CONFIG;
+		return { ...fallback, enabled: false };
+	}
+	return active;
 }
 
 export function savePublishedConfig(config: BarConfig): void {
 	try {
-		writeFileSync(configFile, JSON.stringify(config, null, 2), "utf-8");
+		const bars = getPublishedBars();
+		const idx = bars.findIndex((b) => (b.id && config.id && b.id === config.id) || b.name === config.name);
+		if (idx >= 0) {
+			bars[idx] = { ...bars[idx], ...config };
+		} else if (config.id) {
+			bars.push(config);
+		} else {
+			if (bars.length > 0) {
+				bars[0] = { ...bars[0], ...config };
+			} else {
+				bars.push({ ...config, id: "bar_1" });
+			}
+		}
+		writeFileSync(barsConfigFile, JSON.stringify(bars, null, 2), "utf-8");
+		// Keep published-bar.json synced
+		const activeBar = config.enabled ? config : (bars.find((b) => b && b.enabled) || { ...config, enabled: false });
+		writeFileSync(configFile, JSON.stringify(activeBar, null, 2), "utf-8");
 	} catch (err) {
 		console.error("Failed to write published-bar.json:", err);
 	}
@@ -124,6 +188,11 @@ export function savePublishedConfig(config: BarConfig): void {
 
 export function renderPublicBar(config: BarConfig): string {
 	if (!config || !config.enabled) return "";
+
+	const barIdClean = (config.id || "bar_" + (config.name || "default")).replace(/[^a-zA-Z0-9_-]/g, "_");
+	const barDomId = `smarter-bar-${barIdClean}`;
+	const countdownDomId = `smarter-countdown-${barIdClean}`;
+	const leadFormDomId = `smarter-lead-form-${barIdClean}`;
 
 	const anyConfig = config as any;
 	const couponCode = anyConfig.couponCode || config.discountCode || "WELCOME30";
@@ -156,7 +225,7 @@ export function renderPublicBar(config: BarConfig): string {
 	const isCountdownActive = Boolean(config.countdownEnabled && !isLeadFormActive);
 
 	const countdownHtml = isCountdownActive
-		? `<div id="smarter-countdown-root" class="smarter-countdown-root" data-target="${anyConfig.countdownTarget || "2026-10-25 11:16:55"}" data-tz="${anyConfig.countdownTimezone || "Eritrea/Asmara"}">
+		? `<div id="${countdownDomId}" class="smarter-countdown-root" data-target="${anyConfig.countdownTarget || "2026-10-25 11:16:55"}" data-tz="${anyConfig.countdownTimezone || "Eritrea/Asmara"}">
 				<div class="smarter-countdown-unit">
 					<div class="smarter-countdown-digits">
 						<span class="smarter-countdown-digit-box" data-unit="d0">0</span>
@@ -193,7 +262,7 @@ export function renderPublicBar(config: BarConfig): string {
 
 	const couponTextTitle = anyConfig.couponBarText ? anyConfig.couponBarText.replace(/<[^>]*>/g, "") : "Click to copy your coupon";
 	const copiedTip = (anyConfig.copiedTooltipText || "copied").replace(/"/g, "&quot;");
-	const couponBadgeHtml = `<span class="smarter-coupon-badge" style="position: relative; margin-left: 12px; display: inline-flex; align-items: center; justify-content: center; padding: 2px 3px; border: 2px dashed #ffffff; border-radius: 6px; cursor: pointer; vertical-align: middle; user-select: none;" onclick="copySmarterCoupon(this, '${couponCode}', '${copiedTip}')" title="${couponTextTitle}"><span class="smarter-coupon-code-pill" style="background: #ffffff; color: #000000; padding: 3px 12px; border-radius: 4px; font-weight: bold; font-size: 13px; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 5px; line-height: 1.3; transition: all 0.2s ease;"><span class="smarter-coupon-text-inner">${couponCode}</span></span><span class="smarter-copied-tooltip" style="display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #0f172a; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 99999;"><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: -1px; margin-right: 4px; color: #22c55e;"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>${copiedTip}<span style="position: absolute; top: 100%; left: 50%; margin-left: -4px; border-width: 4px; border-style: solid; border-color: #0f172a transparent transparent transparent;"></span></span></span>`;
+	const couponBadgeHtml = `<span class="smarter-coupon-badge" style="position: relative; margin-left: 12px; display: inline-flex; align-items: center; justify-content: center; padding: 2px 3px; border: 2px dashed #ffffff; border-radius: 6px; cursor: pointer; vertical-align: middle; user-select: none;" onclick="copySmarterCoupon(this, '${couponCode}', '${copiedTip}', '${config.id || barIdClean}')" title="${couponTextTitle}"><span class="smarter-coupon-code-pill" style="background: #ffffff; color: #000000; padding: 3px 12px; border-radius: 4px; font-weight: bold; font-size: 13px; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 5px; line-height: 1.3; transition: all 0.2s ease;"><span class="smarter-coupon-text-inner">${couponCode}</span></span><span class="smarter-copied-tooltip" style="display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #0f172a; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 99999;"><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: -1px; margin-right: 4px; color: #22c55e;"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>${copiedTip}<span style="position: absolute; top: 100%; left: 50%; margin-left: -4px; border-width: 4px; border-style: solid; border-color: #0f172a transparent transparent transparent;"></span></span></span>`;
 	const showDiscountRightaway = Boolean(
 		config.discountEnabled &&
 		config.showCouponWhen === "rightaway"
@@ -201,9 +270,9 @@ export function renderPublicBar(config: BarConfig): string {
 	const discountHtml = showDiscountRightaway ? couponBadgeHtml : "";
 
 	const leadFormHtml = (!showDiscountRightaway && isLeadFormActive)
-		? `<form id="smarter-lead-form" class="smarter-lead-form" style="display: flex; gap: 6px; align-items: center; margin: 0 4px;" onsubmit="event.preventDefault(); handleSmarterLeadSubmit(this);">
-				<input type="text" id="smarter-lead-name" name="name" placeholder="${anyConfig.leadNamePlaceholder || "Enter your name"}" style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 120px;" />
-				<input type="email" id="smarter-lead-email" name="email" placeholder="${anyConfig.leadEmailPlaceholder || anyConfig.leadFormPlaceholder || "Enter your email address"}" required style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 160px;" />
+		? `<form id="${leadFormDomId}" class="smarter-lead-form" style="display: flex; gap: 6px; align-items: center; margin: 0 4px;" onsubmit="event.preventDefault(); handleSmarterLeadSubmit_${barIdClean}(this);">
+				<input type="text" id="smarter-lead-name-${barIdClean}" name="name" placeholder="${anyConfig.leadNamePlaceholder || "Enter your name"}" style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 120px;" />
+				<input type="email" id="smarter-lead-email-${barIdClean}" name="email" placeholder="${anyConfig.leadEmailPlaceholder || anyConfig.leadFormPlaceholder || "Enter your email address"}" required style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 160px;" />
 		   </form>`
 		: "";
 
@@ -214,7 +283,7 @@ export function renderPublicBar(config: BarConfig): string {
 				config.buttonBackgroundColor || "#000000"
 		  }; color: ${
 				config.buttonTextColor || "#ffffff"
-		  }; border: none; border-radius: 6px; padding: 6px 14px; font-weight: 600; font-size: 13px; cursor: pointer;" onclick="handleSmarterBarCta()">${
+		  }; border: none; border-radius: 6px; padding: 6px 14px; font-weight: 600; font-size: 13px; cursor: pointer;" onclick="handleSmarterBarCta_${barIdClean}()">${
 				config.buttonText
 		  }</button>`
 		: "";
@@ -224,7 +293,7 @@ export function renderPublicBar(config: BarConfig): string {
 	const closeDeviceClass = (!hasCloseDesktop && hasCloseMobile) ? "hide-on-desktop" : (hasCloseDesktop && !hasCloseMobile) ? "hide-on-mobile" : (!hasCloseDesktop && !hasCloseMobile) ? "hide-always" : "";
 
 	const closeHtml = `
-		<button type="button" class="smarter-close-btn ${closeDeviceClass}" style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px 8px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;" onclick="dismissSmarterBar()" aria-label="Close announcement bar">
+		<button type="button" class="smarter-close-btn ${closeDeviceClass}" style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px 8px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;" onclick="dismissSmarterBar_${barIdClean}()" aria-label="Close announcement bar">
 			<svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor" style="display: block;"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
 		</button>
 	`;
@@ -459,7 +528,7 @@ export function renderPublicBar(config: BarConfig): string {
 			justify-content: flex-start;
 			white-space: nowrap;
 		}
-		#smarter-announcement-bar-root {
+		.smarter-announcement-bar-root {
 			width: 100%;
 			background-color: ${config.backgroundColor || "#84cc16"};
 			color: ${config.textColor || "#000000"};
@@ -470,21 +539,13 @@ export function renderPublicBar(config: BarConfig): string {
 			align-items: center;
 			justify-content: space-between;
 			gap: 12px;
+			position: relative;
 			font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 		}
-		#smarter-announcement-bar-root.is-bottom {
-			position: fixed;
-			bottom: 0;
-			left: 0;
-			right: 0;
-			z-index: 99999;
-			box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+		.smarter-announcement-bar-root.is-bottom {
+			box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
 		}
-		#smarter-announcement-bar-root.is-top {
-			position: relative;
-			top: 0;
-			left: 0;
-			z-index: 9999;
+		.smarter-announcement-bar-root.is-top {
 			box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 		}
 		.hide-always { display: none !important; }
@@ -493,7 +554,7 @@ export function renderPublicBar(config: BarConfig): string {
 		}
 		@media (max-width: 640px) {
 			.hide-on-mobile { display: none !important; }
-			#smarter-announcement-bar-root {
+			.smarter-announcement-bar-root {
 				flex-direction: column;
 				text-align: center;
 				gap: 8px;
@@ -552,7 +613,7 @@ export function renderPublicBar(config: BarConfig): string {
 			letter-spacing: -0.2px;
 		}
 	</style>
-	<div id="smarter-announcement-bar-root" class="${config.position === "bottom" ? "is-bottom" : "is-top"}">
+	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"}" data-bar-id="${barIdClean}">
 		${
 			showDiscountRightaway
 				? `<div class="smarter-content-container is-static">
@@ -587,8 +648,8 @@ export function renderPublicBar(config: BarConfig): string {
 		</div>
 	</div>
 	<script>
-		(function initCountdown() {
-			var root = document.getElementById('smarter-countdown-root');
+		(function initCountdown_${barIdClean}() {
+			var root = document.getElementById('${countdownDomId}');
 			if (!root) return;
 			var targetRaw = root.getAttribute('data-target') || '';
 			function tick() {
@@ -632,20 +693,53 @@ export function renderPublicBar(config: BarConfig): string {
 			setInterval(tick, 1000);
 		})();
 		(function() {
-			var barEl = document.getElementById('smarter-announcement-bar-root');
+			var barEl = document.getElementById('${barDomId}');
 			if (!barEl) return;
-			var isBottom = barEl.classList.contains('is-bottom');
 			var appearance = "${appearanceAfterClick}";
 			var isDismissed = false;
 			if (appearance === "dont_show") {
-				isDismissed = localStorage.getItem('smarter_bar_dismissed') === 'true';
+				isDismissed = localStorage.getItem('smarter_bar_dismissed_${barIdClean}') === 'true';
 			} else if (appearance === "next_session") {
-				isDismissed = sessionStorage.getItem('smarter_bar_dismissed') === 'true';
+				isDismissed = sessionStorage.getItem('smarter_bar_dismissed_${barIdClean}') === 'true';
 			}
 			if (isDismissed) {
 				barEl.style.display = 'none';
-			} else if (isBottom) {
-				document.body.style.paddingBottom = barEl.offsetHeight + 'px';
+			} else {
+				// Track view impression for this bar
+				(function() {
+					var barId = "${config.id || barIdClean}";
+					var vKey = "smarter_viewed_" + barId;
+					if (!sessionStorage.getItem(vKey)) {
+						sessionStorage.setItem(vKey, "1");
+						try {
+							fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
+								method: "POST",
+								headers: { "Content-Type": "application/json" },
+								body: JSON.stringify({ barId: barId, event: "view" }),
+								keepalive: true
+							});
+						} catch(e) {}
+					}
+				})();
+			}
+
+			// Adjust bottom padding if needed
+			if (typeof window.recalcSmarterBottomPadding === 'function') {
+				window.recalcSmarterBottomPadding();
+			} else {
+				window.recalcSmarterBottomPadding = function() {
+					var container = document.getElementById('smarter-bottom-bars-container');
+					if (!container) return;
+					var h = 0;
+					for (var i = 0; i < container.children.length; i++) {
+						var c = container.children[i];
+						if (c.style.display !== 'none' && window.getComputedStyle(c).display !== 'none') {
+							h += c.offsetHeight;
+						}
+					}
+					document.body.style.paddingBottom = h + 'px';
+				};
+				setTimeout(window.recalcSmarterBottomPadding, 50);
 			}
 
 			// One-by-one sliding carousel
@@ -659,59 +753,73 @@ export function renderPublicBar(config: BarConfig): string {
 				}, 3500);
 			}
 		})();
-		function dismissSmarterBar() {
-			var bar = document.getElementById('smarter-announcement-bar-root');
+		function dismissSmarterBar_${barIdClean}() {
+			var bar = document.getElementById('${barDomId}');
 			if (bar) bar.style.setProperty('display', 'none', 'important');
-			document.body.style.paddingBottom = '0px';
 			var appearance = "${appearanceAfterClick}";
 			if (appearance === "dont_show") {
-				localStorage.setItem('smarter_bar_dismissed', 'true');
+				localStorage.setItem('smarter_bar_dismissed_${barIdClean}', 'true');
 			} else if (appearance === "next_session") {
-				sessionStorage.setItem('smarter_bar_dismissed', 'true');
+				sessionStorage.setItem('smarter_bar_dismissed_${barIdClean}', 'true');
+			}
+			if (typeof window.recalcSmarterBottomPadding === 'function') {
+				window.recalcSmarterBottomPadding();
 			}
 		}
-		function copySmarterCoupon(badgeEl, code, copiedText) {
-			if (navigator.clipboard) {
-				navigator.clipboard.writeText(code);
-			}
-			if (!badgeEl) return;
-			var pillEl = badgeEl.querySelector('.smarter-coupon-code-pill');
-			var innerEl = badgeEl.querySelector('.smarter-coupon-text-inner');
-			var tooltipEl = badgeEl.querySelector('.smarter-copied-tooltip');
-			var checkSvg = '<svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: -1px; margin-right: 4px; color: #16a34a;"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>';
-			
-			if (pillEl) {
-				pillEl.style.background = '#ecfdf5';
-				pillEl.style.color = '#065f46';
-			}
-			if (innerEl) {
-				innerEl.innerHTML = checkSvg + (copiedText || "copied");
-			}
-			if (tooltipEl) {
-				tooltipEl.style.display = 'inline-flex';
-				tooltipEl.style.alignItems = 'center';
-			}
-			
-			if (badgeEl._resetTimer) clearTimeout(badgeEl._resetTimer);
-			badgeEl._resetTimer = setTimeout(function() {
+		if (typeof window.copySmarterCoupon !== 'function') {
+			window.copySmarterCoupon = function(badgeEl, code, copiedText, barId) {
+				if (navigator.clipboard) {
+					navigator.clipboard.writeText(code);
+				}
+				if (barId) {
+					try {
+						fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ barId: barId, event: "click" }),
+							keepalive: true
+						});
+					} catch(e) {}
+				}
+				if (!badgeEl) return;
+				var pillEl = badgeEl.querySelector('.smarter-coupon-code-pill');
+				var innerEl = badgeEl.querySelector('.smarter-coupon-text-inner');
+				var tooltipEl = badgeEl.querySelector('.smarter-copied-tooltip');
+				var checkSvg = '<svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: -1px; margin-right: 4px; color: #16a34a;"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>';
+				
 				if (pillEl) {
-					pillEl.style.background = '#ffffff';
-					pillEl.style.color = '#000000';
+					pillEl.style.background = '#ecfdf5';
+					pillEl.style.color = '#065f46';
 				}
 				if (innerEl) {
-					innerEl.textContent = code;
+					innerEl.innerHTML = checkSvg + (copiedText || "copied");
 				}
 				if (tooltipEl) {
-					tooltipEl.style.display = 'none';
+					tooltipEl.style.display = 'inline-flex';
+					tooltipEl.style.alignItems = 'center';
 				}
-			}, 2200);
+				
+				if (badgeEl._resetTimer) clearTimeout(badgeEl._resetTimer);
+				badgeEl._resetTimer = setTimeout(function() {
+					if (pillEl) {
+						pillEl.style.background = '#ffffff';
+						pillEl.style.color = '#000000';
+					}
+					if (innerEl) {
+						innerEl.textContent = code;
+					}
+					if (tooltipEl) {
+						tooltipEl.style.display = 'none';
+					}
+				}, 2200);
+			};
 		}
-		function handleSmarterLeadSubmit(form) {
+		function handleSmarterLeadSubmit_${barIdClean}(form) {
 			var isClaimsIt = ${Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway")};
 			var nameVal = (form && form.elements && form.elements.name) ? form.elements.name.value : '';
 			var emailVal = (form && form.elements && form.elements.email) ? form.elements.email.value : '';
 			if (isClaimsIt) {
-				var bar = document.getElementById('smarter-announcement-bar-root');
+				var bar = document.getElementById('${barDomId}');
 				if (bar) {
 					var content = bar.querySelector('.smarter-content-container');
 					if (content) {
@@ -726,8 +834,20 @@ export function renderPublicBar(config: BarConfig): string {
 				}
 				if (emailVal) {
 					try {
+						fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								barId: "${config.id || barIdClean}",
+								event: "lead",
+								lead: { name: nameVal, email: emailVal }
+							}),
+							keepalive: true
+						});
+					} catch(e) {}
+					try {
 						var leads = JSON.parse(localStorage.getItem('smarter_bar_subscribers') || '[]');
-						leads.push({ name: nameVal, email: emailVal, date: new Date().toISOString() });
+						leads.push({ barId: "${config.id || barIdClean}", name: nameVal, email: emailVal, date: new Date().toISOString() });
 						localStorage.setItem('smarter_bar_subscribers', JSON.stringify(leads));
 						localStorage.setItem('smarter_bar_subscriber', emailVal);
 					} catch(e) {}
@@ -735,33 +855,53 @@ export function renderPublicBar(config: BarConfig): string {
 			} else {
 				if (emailVal) {
 					try {
+						fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								barId: "${config.id || barIdClean}",
+								event: "lead",
+								lead: { name: nameVal, email: emailVal }
+							}),
+							keepalive: true
+						});
+					} catch(e) {}
+					try {
 						var leads = JSON.parse(localStorage.getItem('smarter_bar_subscribers') || '[]');
-						leads.push({ name: nameVal, email: emailVal, date: new Date().toISOString() });
+						leads.push({ barId: "${config.id || barIdClean}", name: nameVal, email: emailVal, date: new Date().toISOString() });
 						localStorage.setItem('smarter_bar_subscribers', JSON.stringify(leads));
 					} catch(e) {}
 				}
 				if (form && typeof form.reset === 'function') form.reset();
-				dismissSmarterBar();
+				dismissSmarterBar_${barIdClean}();
 			}
 		}
-		function handleSmarterBarCta() {
+		function handleSmarterBarCta_${barIdClean}() {
+			try {
+				fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ barId: "${config.id || barIdClean}", event: "click" }),
+					keepalive: true
+				});
+			} catch(e) {}
 			var isLeadForm = ${Boolean(isLeadFormActive)};
 			if (isLeadForm) {
-				var leadForm = document.getElementById('smarter-lead-form');
+				var leadForm = document.getElementById('${leadFormDomId}');
 				if (leadForm) {
 					var emailInput = leadForm.querySelector('input[type="email"]') || leadForm.querySelector('input');
 					if (emailInput && !emailInput.checkValidity()) {
 						emailInput.reportValidity();
 						return;
 					}
-					handleSmarterLeadSubmit(leadForm);
+					handleSmarterLeadSubmit_${barIdClean}(leadForm);
 					return;
 				}
 			}
 			var isClaimsIt = ${Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway")};
 			var action = "${actionOnClick}";
 			if (isClaimsIt || action === "show_coupon" || action === "copy_code") {
-				var bar = document.getElementById('smarter-announcement-bar-root');
+				var bar = document.getElementById('${barDomId}');
 				if (bar) {
 					var content = bar.querySelector('.smarter-content-container');
 					if (content) {
@@ -777,7 +917,7 @@ export function renderPublicBar(config: BarConfig): string {
 				return;
 			}
 			if (action === "close") {
-				dismissSmarterBar();
+				dismissSmarterBar_${barIdClean}();
 			} else if (action === "open_url") {
 				var url = "${buttonUrl}";
 				if (url) {
@@ -785,7 +925,7 @@ export function renderPublicBar(config: BarConfig): string {
 					window.open(url, "_blank", "noopener,noreferrer");
 				}
 			} else if (action === "thank_you") {
-				var bar = document.getElementById('smarter-announcement-bar-root');
+				var bar = document.getElementById('${barDomId}');
 				if (bar) {
 					var content = bar.querySelector('.smarter-content-container');
 					if (content) {
@@ -817,13 +957,46 @@ export function createPlugin(options = {}) {
 				errorPolicy: "continue" as const,
 				exclusive: false,
 				handler: async () => {
-					const config = getPublishedConfig();
-					if (!config || !config.enabled) return null;
-					return {
-						kind: "html" as const,
-						placement: (config.position === "bottom" ? "body:end" : "body:start") as "body:start" | "body:end",
-						html: renderPublicBar(config),
-					};
+					const bars = getPublishedBars();
+					const activeBars = bars.filter((b) => b && b.enabled);
+					if (activeBars.length === 0) return null;
+
+					const topBars = activeBars.filter((b) => b.position !== "bottom");
+					const bottomBars = activeBars.filter((b) => b.position === "bottom");
+
+					const fragments: Array<{
+						kind: "html";
+						placement: "body:start" | "body:end";
+						html: string;
+					}> = [];
+
+					if (topBars.length > 0) {
+						const topHtml = `
+							<div id="smarter-top-bars-container" style="position: relative; width: 100%; z-index: 99999; display: flex; flex-direction: column;">
+								${topBars.map((b) => renderPublicBar(b)).join("\n")}
+							</div>
+						`;
+						fragments.push({
+							kind: "html" as const,
+							placement: "body:start" as const,
+							html: topHtml,
+						});
+					}
+
+					if (bottomBars.length > 0) {
+						const bottomHtml = `
+							<div id="smarter-bottom-bars-container" style="position: fixed; bottom: 0; left: 0; right: 0; z-index: 99999; display: flex; flex-direction: column; box-shadow: 0 -2px 10px rgba(0,0,0,0.12);">
+								${bottomBars.map((b) => renderPublicBar(b)).join("\n")}
+							</div>
+						`;
+						fragments.push({
+							kind: "html" as const,
+							placement: "body:end" as const,
+							html: bottomHtml,
+						});
+					}
+
+					return fragments;
 				},
 			},
 		},
@@ -835,17 +1008,134 @@ export function createPlugin(options = {}) {
 				handler: async (routeCtx: any) => {
 					const input = routeCtx.input;
 					if (input && typeof input === "object") {
+						if (input.event && input.barId) {
+							const { barId, event, lead } = input;
+							const bars = getPublishedBars();
+							const bar = bars.find(
+								(b) => b.id === barId || b.id === `bar_${barId}` || (b.id && barId && b.id.includes(barId))
+							);
+							if (bar) {
+								if (event === "view") bar.views = (bar.views || 0) + 1;
+								else if (event === "click") bar.clicks = (bar.clicks || 0) + 1;
+								else if (event === "lead") {
+									bar.leads = (bar.leads || 0) + 1;
+									if (lead && lead.email) {
+										try {
+											const subscribersFile = resolve(__dirname, "..", "subscribers.json");
+											let subscribers: any[] = [];
+											if (existsSync(subscribersFile)) {
+												subscribers = JSON.parse(readFileSync(subscribersFile, "utf-8"));
+											}
+											subscribers.push({
+												barId: bar.id,
+												barName: bar.name,
+												name: lead.name || "",
+												email: lead.email,
+												date: new Date().toISOString(),
+											});
+											writeFileSync(subscribersFile, JSON.stringify(subscribers, null, 2), "utf-8");
+										} catch (e) {}
+									}
+								}
+								savePublishedBars(bars);
+								return { success: true, views: bar.views || 0, clicks: bar.clicks || 0, leads: bar.leads || 0 };
+							}
+							return { success: false, error: "Bar not found" };
+						}
+						if (Array.isArray(input.bars)) {
+							savePublishedBars(input.bars);
+							if (input.bar) {
+								savePublishedConfig(input.bar);
+							}
+							return { success: true, message: "Announcement bars published successfully" };
+						}
+						if (Array.isArray(input)) {
+							savePublishedBars(input);
+							return { success: true, message: "Announcement bars published successfully" };
+						}
 						savePublishedConfig(input as BarConfig);
 						return { success: true, message: "Announcement bar published successfully" };
 					}
 					return { success: false, error: "Invalid configuration" };
 				},
 			},
+			bars: {
+				public: true,
+				methods: ["GET", "POST"],
+				handler: async (routeCtx: any) => {
+					if (routeCtx.method === "POST" && routeCtx.input) {
+						const input = routeCtx.input;
+						if (Array.isArray(input)) {
+							savePublishedBars(input);
+							return { success: true, bars: input };
+						} else if (input && Array.isArray(input.bars)) {
+							savePublishedBars(input.bars);
+							return { success: true, bars: input.bars };
+						} else if (input && typeof input === "object") {
+							savePublishedConfig(input as BarConfig);
+							return { success: true, bars: getPublishedBars() };
+						}
+					}
+					return { success: true, bars: getPublishedBars() };
+				},
+			},
+			track: {
+				public: true,
+				methods: ["POST"],
+				request: { body: "json" },
+				handler: async (routeCtx: any) => {
+					const input = routeCtx.input;
+					if (!input || typeof input !== "object") {
+						return { success: false, error: "Invalid payload" };
+					}
+					const { barId, event, lead } = input;
+					const bars = getPublishedBars();
+					const bar = bars.find(
+						(b) => b.id === barId || b.id === `bar_${barId}` || (b.id && barId && b.id.includes(barId))
+					);
+					if (bar) {
+						if (event === "view") {
+							bar.views = (bar.views || 0) + 1;
+						} else if (event === "click") {
+							bar.clicks = (bar.clicks || 0) + 1;
+						} else if (event === "lead") {
+							bar.leads = (bar.leads || 0) + 1;
+							if (lead && lead.email) {
+								try {
+									const subscribersFile = resolve(__dirname, "..", "subscribers.json");
+									let subscribers: any[] = [];
+									if (existsSync(subscribersFile)) {
+										subscribers = JSON.parse(readFileSync(subscribersFile, "utf-8"));
+									}
+									subscribers.push({
+										barId: bar.id,
+										barName: bar.name,
+										name: lead.name || "",
+										email: lead.email,
+										date: new Date().toISOString(),
+									});
+									writeFileSync(subscribersFile, JSON.stringify(subscribers, null, 2), "utf-8");
+								} catch (e) {
+									console.error("Failed to save subscriber:", e);
+								}
+							}
+						}
+						savePublishedBars(bars);
+						return {
+							success: true,
+							views: bar.views || 0,
+							clicks: bar.clicks || 0,
+							leads: bar.leads || 0,
+						};
+					}
+					return { success: false, error: "Bar not found" };
+				},
+			},
 			config: {
 				public: true,
 				methods: ["GET"],
 				handler: async () => {
-					return { success: true, config: getPublishedConfig() };
+					return { success: true, config: getPublishedConfig(), bars: getPublishedBars() };
 				},
 			},
 		},
