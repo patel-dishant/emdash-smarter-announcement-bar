@@ -6,6 +6,7 @@ import {
 	CaretUp,
 	Check,
 	CheckCircle,
+	Clock,
 	ClockCountdown,
 	Desktop,
 	DeviceMobile,
@@ -65,12 +66,28 @@ export interface BarConfig {
 	// Optional Features
 	countdownEnabled: boolean;
 	countdownTarget: string;
-	countdownUrgencyText: string;
+	countdownUrgencyText?: string;
+	countdownTimezone?: string;
+	countdownHideLabels?: boolean;
+	countdownChangeLabels?: boolean;
+	countdownDaysLabel?: string;
+	countdownHoursLabel?: string;
+	countdownMinutesLabel?: string;
+	countdownSecondsLabel?: string;
 	leadFormEnabled: boolean;
+	leadNamePlaceholder?: string;
+	leadEmailPlaceholder?: string;
 	leadFormPlaceholder: string;
 	leadFormButtonLabel: string;
+	leadSendMail?: boolean;
+	leadEmailAddress?: string;
+	leadSenderName?: string;
+	leadEmailSubject?: string;
 	discountEnabled: boolean;
+	showCouponWhen?: "rightaway" | "claims_it" | "after_click" | string;
 	couponCode: string;
+	couponBarText?: string;
+	copiedTooltipText?: string;
 	discountText: string;
 
 	// Step 2: Customize Design
@@ -115,14 +132,30 @@ const DEFAULT_CONFIG: BarConfig = {
 	buttonUrl: "",
 	appearanceAfterClick: "dont_show",
 	countdownEnabled: false,
-	countdownTarget: "2026-12-31T23:59",
-	countdownUrgencyText: "Ends in:",
+	countdownTarget: "2026-10-25 11:16:55",
+	countdownUrgencyText: "",
+	countdownTimezone: "Eritrea/Asmara",
+	countdownHideLabels: false,
+	countdownChangeLabels: true,
+	countdownDaysLabel: "Days",
+	countdownHoursLabel: "Hours",
+	countdownMinutesLabel: "Minutes",
+	countdownSecondsLabel: "Seconds",
 	leadFormEnabled: false,
-	leadFormPlaceholder: "Enter your email",
+	leadNamePlaceholder: "Enter your name",
+	leadEmailPlaceholder: "Enter your email address",
+	leadFormPlaceholder: "Enter your email address",
 	leadFormButtonLabel: "Join",
+	leadSendMail: true,
+	leadEmailAddress: "kokenap418@copytosh.com",
+	leadSenderName: "{name}",
+	leadEmailSubject: "New lead from my announcement bar from {name} on {date} {hours}",
 	discountEnabled: false,
-	couponCode: "WELCOME30",
-	discountText: "Use code at checkout",
+	showCouponWhen: "claims_it",
+	couponCode: "COUPON CODE",
+	couponBarText: "Click to copy your coupon",
+	copiedTooltipText: "copied",
+	discountText: "Click to copy your coupon",
 	backgroundColor: "#8ce99a",
 	textColor: "#000000",
 	buttonBackgroundColor: "#000000",
@@ -218,6 +251,7 @@ export function CustomizeBarPage() {
 	const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
 	const [previewDismissed, setPreviewDismissed] = useState(false);
 	const [previewThankYouShown, setPreviewThankYouShown] = useState(false);
+	const [previewCouponShown, setPreviewCouponShown] = useState(false);
 	const [previewCollapsed, setPreviewCollapsed] = useState(false);
 	const [copiedFeedback, setCopiedFeedback] = useState(false);
 	const [status, setStatus] = useState<"unsaved" | "saved" | "publishing" | "published">("saved");
@@ -237,6 +271,45 @@ export function CustomizeBarPage() {
 		}
 		return DEFAULT_CONFIG;
 	});
+
+	// Reveal coupon text and code box immediately if showCouponWhen is rightaway, or after CTA button click if after_click
+	const isCouponRevealed = Boolean(
+		config.discountEnabled &&
+		(config.showCouponWhen === "rightaway" || previewCouponShown)
+	);
+
+	// Dynamic countdown live calculation
+	const [countdownRemaining, setCountdownRemaining] = useState({ days: "00", hours: "00", minutes: "00", seconds: "00" });
+	useEffect(() => {
+		const calc = () => {
+			if (!config.countdownTarget) {
+				setCountdownRemaining({ days: "00", hours: "00", minutes: "00", seconds: "00" });
+				return;
+			}
+			const target = new Date(config.countdownTarget.replace(" ", "T"));
+			const validTarget = !isNaN(target.getTime()) ? target : new Date(config.countdownTarget);
+			const diff = !isNaN(validTarget.getTime()) ? Math.max(0, validTarget.getTime() - Date.now()) : 0;
+			const s = Math.floor(diff / 1000);
+			const days = Math.floor(s / 86400);
+			const hours = Math.floor((s % 86400) / 3600);
+			const mins = Math.floor((s % 3600) / 60);
+			const secs = s % 60;
+			setCountdownRemaining({
+				days: String(days).padStart(2, "0"),
+				hours: String(hours).padStart(2, "0"),
+				minutes: String(mins).padStart(2, "0"),
+				seconds: String(secs).padStart(2, "0"),
+			});
+		};
+		calc();
+		const interval = setInterval(calc, 1000);
+		return () => clearInterval(interval);
+	}, [config.countdownTarget]);
+
+	useEffect(() => {
+		setPreviewCouponShown(false);
+		setPreviewThankYouShown(false);
+	}, [config.actionOnClick, config.discountEnabled, config.showCouponWhen]);
 
 	// Remove padding from EmDash admin <main> container to eliminate scroll gap between top header and sticky toolbar
 	useEffect(() => {
@@ -371,7 +444,7 @@ export function CustomizeBarPage() {
 			editorRef.current.focus();
 		}
 		try {
-			document.execCommand("styleWithCSS", false, false);
+			(document as any).execCommand("styleWithCSS", false, false);
 		} catch {
 			// ignore
 		}
@@ -420,7 +493,7 @@ export function CustomizeBarPage() {
 			thankYouEditorRef.current.focus();
 		}
 		try {
-			document.execCommand("styleWithCSS", false, false);
+			(document as any).execCommand("styleWithCSS", false, false);
 		} catch {
 			// ignore
 		}
@@ -449,12 +522,64 @@ export function CustomizeBarPage() {
 		}
 	}, [activeStep, config.actionOnClick, config.thankYouMessage]);
 
+	// Rich text editor ref and formatting tracking for Coupon Bar Text in Discount card
+	const couponEditorRef = useRef<HTMLDivElement>(null);
+	const [couponFormats, setCouponFormats] = useState({ bold: false, italic: false, underline: false });
+
+	const checkCouponFormatting = () => {
+		try {
+			setCouponFormats({
+				bold: document.queryCommandState("bold"),
+				italic: document.queryCommandState("italic"),
+				underline: document.queryCommandState("underline"),
+			});
+		} catch {
+			// ignore
+		}
+	};
+
+	const applyCouponFormat = (command: string, value: string | undefined = undefined) => {
+		if (couponEditorRef.current) {
+			couponEditorRef.current.focus();
+		}
+		try {
+			(document as any).execCommand("styleWithCSS", false, false);
+		} catch {
+			// ignore
+		}
+		document.execCommand(command, false, value);
+		checkCouponFormatting();
+		if (couponEditorRef.current) {
+			update("couponBarText", couponEditorRef.current.innerHTML);
+		}
+	};
+
+	const handleCouponEditorInput = () => {
+		if (!couponEditorRef.current) return;
+		update("couponBarText", couponEditorRef.current.innerHTML);
+		checkCouponFormatting();
+	};
+
+	// Keep coupon bar text editor synchronized with config.couponBarText
+	useEffect(() => {
+		if (couponEditorRef.current && activeStep === 1 && config.discountEnabled) {
+			if (document.activeElement !== couponEditorRef.current) {
+				const currentVal = config.couponBarText || "Click to copy your coupon";
+				if (couponEditorRef.current.innerHTML !== currentVal) {
+					couponEditorRef.current.innerHTML = currentVal;
+				}
+			}
+		}
+	}, [activeStep, config.discountEnabled, config.couponBarText]);
+
 	// Active slide index for one-by-one sliding
 	const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
-	const currentMessages = (config.messages && config.messages.length > 0)
-		? config.messages
-		: (config.text ? config.text.split("\n").filter(Boolean) : ["Get 30% off your first purchase"]);
+	const currentMessages = isCouponRevealed
+		? [config.couponBarText || "Click to copy your coupon"]
+		: ((config.messages && config.messages.length > 0)
+			? config.messages
+			: (config.text ? config.text.split("\n").filter(Boolean) : ["Get 30% off your first purchase"]));
 
 	// Slide one by one in live preview
 	useEffect(() => {
@@ -498,7 +623,18 @@ export function CustomizeBarPage() {
 		const updated = current.includes(device)
 			? current.filter((d) => d !== device)
 			: [...current, device];
-		update(key, updated);
+		const isDisablingButton = key === "buttonDevices" && updated.length === 0;
+		setConfig((prev) => ({
+			...prev,
+			[key]: updated,
+			leadFormEnabled: isDisablingButton ? false : prev.leadFormEnabled,
+		}));
+		if (isDisablingButton && config.leadFormEnabled) {
+			setToast({
+				message: "Button disabled: Contact Lead Form has been disabled as well.",
+				type: "info",
+			});
+		}
 	};
 
 	// Validate step
@@ -1431,6 +1567,64 @@ export function CustomizeBarPage() {
 					min-width: 26px;
 				}
 
+				/* Modern Pill Switch with embedded ON/OFF text */
+				.switch-track-pill {
+					width: 52px;
+					height: 26px;
+					border-radius: 9999px;
+					background: #cbd5e1;
+					position: relative;
+					transition: background-color 0.2s ease;
+					display: flex;
+					align-items: center;
+					cursor: pointer;
+					user-select: none;
+				}
+				.switch-track-pill.on {
+					background: #2563eb;
+				}
+				.switch-text-inside {
+					position: absolute;
+					font-size: 10px;
+					font-weight: 700;
+					color: #ffffff;
+					line-height: 1;
+				}
+				.switch-track-pill.on .switch-text-inside {
+					left: 8px;
+				}
+				.switch-track-pill:not(.on) .switch-text-inside {
+					right: 8px;
+				}
+				.switch-thumb-pill {
+					width: 22px;
+					height: 22px;
+					border-radius: 50%;
+					background: #ffffff;
+					position: absolute;
+					top: 2px;
+					left: 2px;
+					transition: transform 0.2s ease;
+					box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+				}
+				.switch-track-pill.on .switch-thumb-pill {
+					transform: translateX(26px);
+				}
+				.blue-help-bubble {
+					width: 16px;
+					height: 16px;
+					border-radius: 50%;
+					background: #3b82f6;
+					color: #ffffff;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					font-size: 11px;
+					font-weight: 700;
+					flex-shrink: 0;
+					cursor: help;
+				}
+
 				/* Feature Card Expanded Settings */
 				.feature-expanded-panel {
 					margin-top: 18px;
@@ -1501,10 +1695,63 @@ export function CustomizeBarPage() {
 				}
 				.floating-toast.success { background: #0f172a; border: 1px solid #334155; }
 				.floating-toast.error { background: #dc2626; border: 1px solid #ef4444; }
-				.floating-toast.info { background: #0f172a; border: 1px solid #334155; }
 				@keyframes toastSlideUp {
 					from { transform: translateY(20px); opacity: 0; }
 					to { transform: translateY(0); opacity: 1; }
+				}
+
+				/* Countdown Timer Widget */
+				.smarter-countdown-root {
+					display: inline-flex;
+					align-items: center;
+					gap: 3px;
+					user-select: none;
+				}
+				.smarter-countdown-unit {
+					display: inline-flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: center;
+				}
+				.smarter-countdown-digits {
+					display: inline-flex;
+					align-items: center;
+					gap: 2px;
+				}
+				.smarter-countdown-digit-box {
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					width: 17px;
+					height: 22px;
+					background: #ffffff;
+					color: #000000;
+					border: 1px solid rgba(0, 0, 0, 0.25);
+					border-radius: 3px;
+					font-size: 13px;
+					font-weight: 700;
+					line-height: 1;
+					box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+				}
+				.smarter-countdown-colon {
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					height: 22px;
+					font-size: 13px;
+					font-weight: 700;
+					color: inherit;
+					padding: 0 2px;
+					line-height: 1;
+				}
+				.smarter-countdown-unit-label {
+					font-size: 10px;
+					font-weight: 600;
+					color: inherit;
+					margin-top: 2px;
+					text-align: center;
+					line-height: 1.1;
+					letter-spacing: -0.2px;
 				}
 			`}</style>
 
@@ -1674,6 +1921,125 @@ export function CustomizeBarPage() {
 										}}
 									/>
 								</div>
+							) : isCouponRevealed ? (
+								<div className="announcement-bar-content is-static">
+									<span
+										className="bar-static-content smarter-coupon-bar-text"
+										style={{
+											whiteSpace: "pre-wrap",
+											wordBreak: "break-word",
+											display: "inline-block",
+										}}
+										dangerouslySetInnerHTML={{
+											__html: config.couponBarText || "Click to copy your coupon",
+										}}
+									/>
+									{config.countdownEnabled && (
+										<span
+											style={{
+												marginLeft: "12px",
+												padding: "2px 8px",
+												borderRadius: "4px",
+												background: "rgba(0,0,0,0.15)",
+												fontWeight: "bold",
+												fontSize: "12px",
+												display: "inline-flex",
+												alignItems: "center",
+												gap: "5px",
+											}}
+										>
+											<ClockCountdown size={14} weight="bold" />
+											<span>{config.countdownUrgencyText} 02:45:12</span>
+										</span>
+									)}
+									<span
+										className="coupon-badge-container"
+										onClick={() => {
+											if (navigator.clipboard) {
+												navigator.clipboard.writeText(config.couponCode || "COUPON CODE");
+											}
+											setCopiedFeedback(true);
+											setTimeout(() => setCopiedFeedback(false), 2200);
+										}}
+										style={{
+											position: "relative",
+											marginLeft: "12px",
+											display: "inline-flex",
+											alignItems: "center",
+											justifyContent: "center",
+											padding: "2px 3px",
+											border: "2px dashed #ffffff",
+											borderRadius: "6px",
+											cursor: "pointer",
+											verticalAlign: "middle",
+										}}
+										title={copiedFeedback ? (config.copiedTooltipText || "copied") : (config.couponBarText ? config.couponBarText.replace(/<[^>]*>/g, "") : "Click to copy")}
+									>
+										<span
+											style={{
+												background: copiedFeedback ? "#ecfdf5" : "#ffffff",
+												color: copiedFeedback ? "#065f46" : "#000000",
+												padding: "3px 12px",
+												borderRadius: "4px",
+												fontWeight: "bold",
+												fontSize: "13px",
+												letterSpacing: "0.5px",
+												display: "inline-flex",
+												alignItems: "center",
+												gap: "5px",
+												lineHeight: "1.3",
+												fontFamily: "inherit",
+												transition: "all 0.2s ease",
+											}}
+										>
+											{copiedFeedback ? (
+												<>
+													<Check size={13} weight="bold" style={{ color: "#16a34a" }} />
+													<span>{config.copiedTooltipText || "copied"}</span>
+												</>
+											) : (
+												config.couponCode || "COUPON CODE"
+											)}
+										</span>
+										{copiedFeedback && (
+											<span
+												style={{
+													position: "absolute",
+													bottom: "calc(100% + 8px)",
+													left: "50%",
+													transform: "translateX(-50%)",
+													background: "#0f172a",
+													color: "#ffffff",
+													padding: "4px 10px",
+													borderRadius: "4px",
+													fontSize: "11px",
+													fontWeight: 600,
+													whiteSpace: "nowrap",
+													pointerEvents: "none",
+													boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+													zIndex: 99999,
+													display: "inline-flex",
+													alignItems: "center",
+													gap: "4px",
+												}}
+											>
+												<Check size={12} weight="bold" style={{ color: "#22c55e" }} />
+												<span>{config.copiedTooltipText || "copied"}</span>
+												<span
+													style={{
+														position: "absolute",
+														top: "100%",
+														left: "50%",
+														marginLeft: "-4px",
+														borderWidth: "4px",
+														borderStyle: "solid",
+														borderColor: "#0f172a transparent transparent transparent",
+													}}
+												/>
+											</span>
+										)}
+									</span>
+								</div>
 							) : (
 								<div className={`announcement-bar-content ${config.textType === "marquee" ? "is-marquee" : config.textType === "sliding" ? "is-sliding" : "is-static"}`}>
 								{config.textType === "marquee" ? (
@@ -1715,32 +2081,6 @@ export function CustomizeBarPage() {
 												<span>{config.countdownUrgencyText} 02:45:12</span>
 											</span>
 										)}
-										{config.discountEnabled && (
-											<span
-												onClick={() => {
-													setCopiedFeedback(true);
-													setTimeout(() => setCopiedFeedback(false), 2000);
-												}}
-												style={{
-													marginLeft: "10px",
-													padding: "2px 8px",
-													borderRadius: "4px",
-													background: "#ffffff",
-													color: "#000000",
-													fontWeight: "bold",
-													cursor: "pointer",
-													border: "1px dashed #000000",
-													fontSize: "12px",
-													display: "inline-flex",
-													alignItems: "center",
-													gap: "5px",
-												}}
-												title="Click to simulate copy"
-											>
-												<Tag size={14} weight="bold" />
-												<span>{config.couponCode} {copiedFeedback ? "(Copied!)" : "(Copy)"}</span>
-											</span>
-										)}
 									</div>
 								) : config.textType === "sliding" ? (
 									<div key={`slide-item-${activeSlideIndex}`} className="sliding-once-track">
@@ -1752,53 +2092,10 @@ export function CustomizeBarPage() {
 												whiteSpace: "pre-wrap",
 												wordBreak: "break-word",
 											}}
-										>
-											{currentMessages.filter(Boolean)[activeSlideIndex] || config.text}
-										</span>
-										{config.countdownEnabled && (
-											<span
-												style={{
-													marginLeft: "12px",
-													padding: "2px 8px",
-													borderRadius: "4px",
-													background: "rgba(0,0,0,0.15)",
-													fontWeight: "bold",
-													fontSize: "12px",
-													display: "inline-flex",
-													alignItems: "center",
-													gap: "5px",
-												}}
-											>
-												<ClockCountdown size={14} weight="bold" />
-												<span>{config.countdownUrgencyText} 02:45:12</span>
-											</span>
-										)}
-										{config.discountEnabled && (
-											<span
-												onClick={() => {
-													setCopiedFeedback(true);
-													setTimeout(() => setCopiedFeedback(false), 2000);
-												}}
-												style={{
-													marginLeft: "10px",
-													padding: "2px 8px",
-													borderRadius: "4px",
-													background: "#ffffff",
-													color: "#000000",
-													fontWeight: "bold",
-													cursor: "pointer",
-													border: "1px dashed #000000",
-													fontSize: "12px",
-													display: "inline-flex",
-													alignItems: "center",
-													gap: "5px",
-												}}
-												title="Click to simulate copy"
-											>
-												<Tag size={14} weight="bold" />
-												<span>{config.couponCode} {copiedFeedback ? "(Copied!)" : "(Copy)"}</span>
-											</span>
-										)}
+											dangerouslySetInnerHTML={{
+												__html: currentMessages.filter(Boolean)[activeSlideIndex] || config.text
+											}}
+										/>
 									</div>
 								) : (
 									<>
@@ -1810,85 +2107,58 @@ export function CustomizeBarPage() {
 												wordBreak: "break-word",
 												display: "inline-block",
 											}}
-											dangerouslySetInnerHTML={{ __html: config.text || "" }}
+											dangerouslySetInnerHTML={{
+												__html: config.text || ""
+											}}
 										/>
 										{config.iconPosition === "right" && renderPreviewIcon()}
-										{config.countdownEnabled && (
-											<span
-												style={{
-													marginLeft: "12px",
-													padding: "2px 8px",
-													borderRadius: "4px",
-													background: "rgba(0,0,0,0.15)",
-													fontWeight: "bold",
-													fontSize: "12px",
-													display: "inline-flex",
-													alignItems: "center",
-													gap: "5px",
-												}}
-											>
-												<ClockCountdown size={14} weight="bold" />
-												<span>{config.countdownUrgencyText} 02:45:12</span>
-											</span>
-										)}
-										{config.discountEnabled && (
-											<span
-												onClick={() => {
-													setCopiedFeedback(true);
-													setTimeout(() => setCopiedFeedback(false), 2000);
-												}}
-												style={{
-													marginLeft: "10px",
-													padding: "2px 8px",
-													borderRadius: "4px",
-													background: "#ffffff",
-													color: "#000000",
-													fontWeight: "bold",
-													cursor: "pointer",
-													border: "1px dashed #000000",
-													fontSize: "12px",
-													display: "inline-flex",
-													alignItems: "center",
-													gap: "5px",
-												}}
-												title="Click to simulate copy"
-											>
-												<Tag size={14} weight="bold" />
-												<span>{config.couponCode} {copiedFeedback ? "(Copied!)" : "(Copy)"}</span>
-											</span>
-										)}
 										{config.leadFormEnabled && (
-											<div style={{ display: "inline-flex", gap: "6px", marginLeft: "12px" }}>
+											<div style={{ display: "inline-flex", gap: "6px", marginLeft: "12px", alignItems: "center" }}>
 												<input
+													id="preview-lead-name-input"
 													type="text"
-													placeholder={config.leadFormPlaceholder}
+													placeholder={config.leadNamePlaceholder || "Enter your name"}
 													onClick={(e) => e.stopPropagation()}
+													onKeyDown={(e) => {
+														if (e.key === "Enter") {
+															e.preventDefault();
+															const btn = document.getElementById("preview-cta-btn");
+															if (btn) btn.click();
+														}
+													}}
 													style={{
 														padding: "4px 8px",
 														fontSize: "12px",
 														borderRadius: "4px",
-														border: "1px solid #ccc",
+														border: "1px solid rgba(0,0,0,0.2)",
+														background: "rgba(255,255,255,0.95)",
+														color: "#111",
+														maxWidth: "110px",
 													}}
 												/>
-												<button
-													type="button"
-													onClick={(e) => {
-														e.stopPropagation();
-														setToast({ message: "Preview: Lead form submitted (no real action taken).", type: "info" });
+												<input
+													id="preview-lead-email-input"
+													type="email"
+													required
+													placeholder={config.leadEmailPlaceholder || config.leadFormPlaceholder || "Enter your email address"}
+													onClick={(e) => e.stopPropagation()}
+													onKeyDown={(e) => {
+														if (e.key === "Enter") {
+															e.preventDefault();
+															const btn = document.getElementById("preview-cta-btn");
+															if (btn) btn.click();
+														}
 													}}
 													style={{
-														padding: "4px 10px",
+														padding: "4px 8px",
 														fontSize: "12px",
-														fontWeight: "bold",
-														background: config.buttonBackgroundColor,
-														color: config.buttonTextColor,
-														border: "none",
 														borderRadius: "4px",
-														cursor: "pointer",
+														border: "1px solid rgba(0,0,0,0.2)",
+														background: "rgba(255,255,255,0.95)",
+														color: "#111",
+														maxWidth: "140px",
 													}}
-												>
-													{config.leadFormButtonLabel}
-												</button>
+												/>
 											</div>
 										)}
 									</>
@@ -1896,11 +2166,63 @@ export function CustomizeBarPage() {
 							</div>
 							)}
 
-							{/* Right Actions: CTA Button + Close Button */}
-							<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-								{/* Show CTA Button if device enabled and not displaying thank you state */}
-								{!previewThankYouShown && config.buttonDevices.includes(previewDevice) && config.buttonText && (
+							{/* Right Actions: Countdown Timer + CTA Button + Close Button */}
+							<div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+								{config.countdownEnabled && (
+									<div className="smarter-countdown-root" style={{ display: "inline-flex", alignItems: "center", gap: "3px", userSelect: "none", color: config.textColor || "#000000" }}>
+										<div className="smarter-countdown-unit" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+											<div className="smarter-countdown-digits" style={{ display: "inline-flex", gap: "2px" }}>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.days[0] || "0"}</span>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.days[1] || "0"}</span>
+											</div>
+											{!config.countdownHideLabels && (
+												<span className="smarter-countdown-unit-label" style={{ fontSize: "10px", fontWeight: 600, marginTop: "2px", lineHeight: 1.1, color: "inherit" }}>
+													{config.countdownDaysLabel || "Days"}
+												</span>
+											)}
+										</div>
+										<span className="smarter-countdown-colon" style={{ height: "22px", display: "inline-flex", alignItems: "center", fontWeight: 700, padding: "0 2px", color: "inherit" }}>:</span>
+										<div className="smarter-countdown-unit" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+											<div className="smarter-countdown-digits" style={{ display: "inline-flex", gap: "2px" }}>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.hours[0] || "0"}</span>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.hours[1] || "0"}</span>
+											</div>
+											{!config.countdownHideLabels && (
+												<span className="smarter-countdown-unit-label" style={{ fontSize: "10px", fontWeight: 600, marginTop: "2px", lineHeight: 1.1, color: "inherit" }}>
+													{config.countdownHoursLabel || "Hours"}
+												</span>
+											)}
+										</div>
+										<span className="smarter-countdown-colon" style={{ height: "22px", display: "inline-flex", alignItems: "center", fontWeight: 700, padding: "0 2px", color: "inherit" }}>:</span>
+										<div className="smarter-countdown-unit" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+											<div className="smarter-countdown-digits" style={{ display: "inline-flex", gap: "2px" }}>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.minutes[0] || "0"}</span>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.minutes[1] || "0"}</span>
+											</div>
+											{!config.countdownHideLabels && (
+												<span className="smarter-countdown-unit-label" style={{ fontSize: "10px", fontWeight: 600, marginTop: "2px", lineHeight: 1.1, color: "inherit" }}>
+													{config.countdownMinutesLabel || "Minutes"}
+												</span>
+											)}
+										</div>
+										<span className="smarter-countdown-colon" style={{ height: "22px", display: "inline-flex", alignItems: "center", fontWeight: 700, padding: "0 2px", color: "inherit" }}>:</span>
+										<div className="smarter-countdown-unit" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+											<div className="smarter-countdown-digits" style={{ display: "inline-flex", gap: "2px" }}>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.seconds[0] || "0"}</span>
+												<span className="smarter-countdown-digit-box">{countdownRemaining.seconds[1] || "0"}</span>
+											</div>
+											{!config.countdownHideLabels && (
+												<span className="smarter-countdown-unit-label" style={{ fontSize: "10px", fontWeight: 600, marginTop: "2px", lineHeight: 1.1, color: "inherit" }}>
+													{config.countdownSecondsLabel || "Seconds"}
+												</span>
+											)}
+										</div>
+									</div>
+								)}
+								{/* Show CTA Button if device enabled and not displaying thank you or revealed coupon state */}
+								{!previewThankYouShown && !isCouponRevealed && config.buttonDevices.includes(previewDevice) && config.buttonText && (
 									<button
+										id="preview-cta-btn"
 										type="button"
 										className={`preview-cta-btn effect-${config.attentionEffect}`}
 										style={{
@@ -1908,6 +2230,40 @@ export function CustomizeBarPage() {
 											color: config.buttonTextColor,
 										}}
 										onClick={() => {
+											if (config.leadFormEnabled) {
+												const emailInput = document.getElementById("preview-lead-email-input") as HTMLInputElement | null;
+												const nameInput = document.getElementById("preview-lead-name-input") as HTMLInputElement | null;
+												if (emailInput && !emailInput.checkValidity()) {
+													emailInput.reportValidity();
+													return;
+												}
+												const isClaimsIt = Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway");
+												if (isClaimsIt) {
+													setPreviewCouponShown(true);
+													setToast({
+														message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
+														type: "success",
+													});
+													return;
+												} else {
+													setPreviewDismissed(true);
+													setToast({
+														message: "Contact lead submitted. Announcement bar closed automatically.",
+														type: "info",
+													});
+													if (nameInput) nameInput.value = "";
+													if (emailInput) emailInput.value = "";
+													return;
+												}
+											}
+											if (config.discountEnabled && config.showCouponWhen !== "rightaway") {
+												setPreviewCouponShown(true);
+												setToast({
+													message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
+													type: "success",
+												});
+												return;
+											}
 											if (config.actionOnClick === "close") {
 												setPreviewDismissed(true);
 											} else if (config.actionOnClick === "open_url") {
@@ -1927,8 +2283,9 @@ export function CustomizeBarPage() {
 													type: "success",
 												});
 											} else if (config.actionOnClick === "show_coupon" || config.actionOnClick === "copy_code") {
+												setPreviewCouponShown(true);
 												setToast({
-													message: `Coupon code: ${config.couponCode || "WELCOME30"}`,
+													message: `Coupon revealed: ${config.couponCode || "COUPON CODE"}`,
 													type: "success",
 												});
 											}
@@ -1937,6 +2294,7 @@ export function CustomizeBarPage() {
 										{config.buttonText}
 									</button>
 								)}
+
 
 								{/* Show Close Icon if device enabled */}
 								{config.closeButtonDevices.includes(previewDevice) && (
@@ -1966,6 +2324,7 @@ export function CustomizeBarPage() {
 									onClick={() => {
 										setPreviewDismissed(false);
 										setPreviewThankYouShown(false);
+										setPreviewCouponShown(false);
 									}}
 									style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
 								>
@@ -1985,6 +2344,18 @@ export function CustomizeBarPage() {
 						>
 							<Eye size={14} weight="bold" />
 							<span>Reset thank you state (view standard bar)</span>
+						</button>
+					)}
+
+					{previewCouponShown && !previewDismissed && (
+						<button
+							type="button"
+							className="preview-reset-btn"
+							onClick={() => setPreviewCouponShown(false)}
+							style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "8px" }}
+						>
+							<Eye size={14} weight="bold" />
+							<span>Reset coupon state (view standard bar)</span>
 						</button>
 					)}
 
@@ -2065,7 +2436,7 @@ export function CustomizeBarPage() {
 							<div className="form-row">
 								<div className="row-label-col">
 									<span>Position</span>
-									<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Placement of the announcement bar" />
+									<span title="Placement of the announcement bar" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="radiogroup" aria-label="Position">
@@ -2097,7 +2468,7 @@ export function CustomizeBarPage() {
 							<div className="form-row">
 								<div className="row-label-col">
 									<span>Show Close Button</span>
-									<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Show dismiss 'X' icon on specific devices" />
+									<span title="Show dismiss 'X' icon on specific devices" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="group" aria-label="Show Close Button">
@@ -2135,7 +2506,7 @@ export function CustomizeBarPage() {
 							<div className="form-row">
 								<div className="row-label-col">
 									<span>Text Type</span>
-									<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Choose Static (fixed in place), Sliding (slides in one time and stays), or Marquee (slides continuously)" />
+									<span title="Choose Static (fixed in place), Sliding (slides in one time and stays), or Marquee (slides continuously)" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="radiogroup" aria-label="Text Type">
@@ -2304,7 +2675,7 @@ export function CustomizeBarPage() {
 									<div className="form-row">
 										<div className="row-label-col">
 											<span>Text Icon</span>
-											<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Optional icon to display next to your announcement" />
+											<span title="Optional icon to display next to your announcement" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 										</div>
 										<div className="row-control-col">
 											<div
@@ -2404,7 +2775,7 @@ export function CustomizeBarPage() {
 									<div className="form-row">
 										<div className="row-label-col">
 											<span>Icon Position</span>
-											<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Choose whether to place the icon on the left or right of your announcement text" />
+											<span title="Choose whether to place the icon on the left or right of your announcement text" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 										</div>
 										<div className="row-control-col">
 											<div className="option-button-group" role="radiogroup" aria-label="Icon Position">
@@ -2441,7 +2812,7 @@ export function CustomizeBarPage() {
 									<div className="form-row">
 										<div className="row-label-col">
 											<span>Icon Style</span>
-											<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Adjust icon appearance for high visibility on dark or light announcement bars" />
+											<span title="Adjust icon appearance for high visibility on dark or light announcement bars" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 										</div>
 										<div className="row-control-col">
 											<div className="option-button-group" role="radiogroup" aria-label="Icon Style">
@@ -2503,16 +2874,66 @@ export function CustomizeBarPage() {
 
 						{/* Card 4: Button (Visibility, Text, Attention, Click Action) */}
 						<div className="editor-card">
-							<h2 className="card-title">Button</h2>
+							<div className="card-header-row">
+								<h2 className="card-title">Button</h2>
+								<label className="switch-root" aria-label="Toggle Button">
+									<div className={`switch-track ${config.buttonDevices && config.buttonDevices.length > 0 ? "on" : ""}`}>
+										<div className="switch-thumb" />
+									</div>
+									<span className="switch-label-text">{config.buttonDevices && config.buttonDevices.length > 0 ? "ON" : "OFF"}</span>
+									<input
+										type="checkbox"
+										checked={Boolean(config.buttonDevices && config.buttonDevices.length > 0)}
+										onChange={(e) => {
+											const checked = e.target.checked;
+											if (!checked) {
+												setConfig((prev) => ({
+													...prev,
+													buttonDevices: [],
+													leadFormEnabled: false,
+												}));
+												if (config.leadFormEnabled) {
+													setToast({
+														message: "Button disabled: Contact Lead Form has been disabled as well.",
+														type: "info",
+													});
+												}
+											} else {
+												setConfig((prev) => ({
+													...prev,
+													buttonDevices: ["desktop", "mobile"],
+													buttonText: prev.buttonText?.trim() ? prev.buttonText : "Learn More",
+												}));
+											}
+										}}
+										style={{ display: "none" }}
+									/>
+								</label>
+							</div>
 							<p className="card-subtitle">
 								The Button Setting option allows you to customize the button's appearance, behavior, and functionality for an optimized user experience.
 							</p>
 
-							{/* Row: Show Button */}
+							{Boolean(config.buttonDevices && config.buttonDevices.length > 0) && (
+								<div style={{ marginTop: "20px" }}>
+									{config.discountEnabled && config.showCouponWhen === "rightaway" && (
+										<div style={{ padding: "8px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", marginBottom: "14px", fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
+											<Info size={15} style={{ color: "#3b82f6", flexShrink: 0 }} />
+											<span>CTA button is currently hidden because Discount is set to <strong>Display rightaway</strong>.</span>
+										</div>
+									)}
+									{config.leadFormEnabled && !(config.discountEnabled && config.showCouponWhen === "rightaway") && (
+										<div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px", marginBottom: "14px", fontSize: "12px", color: "#166534", display: "flex", alignItems: "center", gap: "6px" }}>
+											<EnvelopeSimple size={16} style={{ color: "#16a34a", flexShrink: 0 }} />
+											<span>Contact Lead Form is enabled. This button acts as the submission button for collecting visitor details.</span>
+										</div>
+									)}
+
+									{/* Row: Show Button */}
 							<div className="form-row">
 								<div className="row-label-col">
 									<span>Show Button</span>
-									<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Display call-to-action button on specific devices" />
+									<span title="Display call-to-action button on specific devices" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</div>
 								<div className="row-control-col">
 									<div className="option-button-group" role="group" aria-label="Show CTA Button">
@@ -2549,7 +2970,22 @@ export function CustomizeBarPage() {
 										type="text"
 										className="text-field-input"
 										value={config.buttonText}
-										onChange={(e) => update("buttonText", e.target.value)}
+										onChange={(e) => {
+											const val = e.target.value;
+											if (!val.trim() && config.leadFormEnabled) {
+												setConfig((prev) => ({
+													...prev,
+													buttonText: val,
+													leadFormEnabled: false,
+												}));
+												setToast({
+													message: "Button text removed: Contact Lead Form has been disabled as well.",
+													type: "info",
+												});
+											} else {
+												update("buttonText", val);
+											}
+										}}
 										placeholder="e.g. Submit, Claim Offer"
 									/>
 								</div>
@@ -2582,14 +3018,30 @@ export function CustomizeBarPage() {
 							<div className="form-row">
 								<label className="row-label-col" htmlFor="action-on-click-select">
 									<span>Action On Click</span>
-									<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="What occurs when visitor clicks the CTA button" />
+									<span title="What occurs when visitor clicks the CTA button" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</label>
 								<div className="row-control-col">
 									<select
 										id="action-on-click-select"
 										className="text-field-select"
 										value={config.actionOnClick}
-										onChange={(e) => update("actionOnClick", e.target.value as any)}
+										onChange={(e) => {
+											const val = e.target.value as any;
+											if (val === "show_coupon") {
+												setConfig((prev) => ({
+													...prev,
+													actionOnClick: val,
+													discountEnabled: true,
+													showCouponWhen: prev.showCouponWhen || "claims_it",
+													couponCode: prev.couponCode && prev.couponCode !== "WELCOME30" ? prev.couponCode : "COUPON CODE",
+													couponBarText: prev.couponBarText || "Click to copy your coupon",
+													copiedTooltipText: prev.copiedTooltipText || "copied",
+												}));
+												setPreviewCouponShown(false);
+											} else {
+												update("actionOnClick", val);
+											}
+										}}
 									>
 										<option value="close">Close the bar</option>
 										<option value="open_url">Redirect the visitor to another URL</option>
@@ -2702,18 +3154,7 @@ export function CustomizeBarPage() {
 										</div>
 									)}
 
-									{(config.actionOnClick === "show_coupon" || config.actionOnClick === "copy_code") && (
-										<div style={{ marginTop: "10px" }}>
-											<input
-												type="text"
-												className="text-field-input"
-												value={config.couponCode || ""}
-												onChange={(e) => update("couponCode", e.target.value)}
-												placeholder="WELCOME30"
-											/>
-											<p className="row-hint-text">Coupon code to display and copy to clipboard.</p>
-										</div>
-									)}
+
 								</div>
 							</div>
 
@@ -2721,7 +3162,7 @@ export function CustomizeBarPage() {
 							<div className="form-row">
 								<label className="row-label-col" htmlFor="appearance-after-click-select">
 									<span>Bar Appearance After Button Click</span>
-									<Info size={16} style={{ color: "#9ca3af", flexShrink: 0, cursor: "help" }} title="Persistent visibility behavior after button click" />
+									<span title="Persistent visibility behavior after button click" style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}><Info size={16} style={{ color: "#9ca3af", flexShrink: 0 }} /></span>
 								</label>
 								<div className="row-control-col">
 									<select
@@ -2736,13 +3177,15 @@ export function CustomizeBarPage() {
 									</select>
 								</div>
 							</div>
+								</div>
+							)}
 						</div>
 
 						{/* Optional Feature Card: Countdown */}
 						<div className="editor-card">
 							<div className="card-header-row">
 								<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-									<Timer size={20} weight="bold" style={{ color: "#d97706" }} />
+									<Clock size={20} weight="regular" style={{ color: "#374151" }} />
 									<h2 className="card-title">Countdown</h2>
 								</div>
 								<label className="switch-root" aria-label="Toggle Countdown">
@@ -2753,7 +3196,21 @@ export function CustomizeBarPage() {
 									<input
 										type="checkbox"
 										checked={config.countdownEnabled}
-										onChange={(e) => update("countdownEnabled", e.target.checked)}
+										onChange={(e) => {
+											const checked = e.target.checked;
+											const hadLeadForm = Boolean(config.leadFormEnabled);
+											setConfig((prev) => ({
+												...prev,
+												countdownEnabled: checked,
+												leadFormEnabled: checked ? false : prev.leadFormEnabled,
+											}));
+											if (checked && hadLeadForm) {
+												setToast({
+													message: "Countdown enabled: Contact Lead Form has been disabled.",
+													type: "info",
+												});
+											}
+										}}
 										style={{ display: "none" }}
 									/>
 								</label>
@@ -2763,32 +3220,148 @@ export function CustomizeBarPage() {
 							</p>
 
 							{config.countdownEnabled && (
-								<div className="feature-expanded-panel">
+								<div className="feature-expanded-panel" style={{ borderTop: "1px solid #f1f5f9", marginTop: "16px", paddingTop: "16px" }}>
+									{/* Row 1: Specific End Date & Time */}
 									<div className="form-row">
-										<label className="row-label-col" htmlFor="countdown-target">Target End Date & Time</label>
+										<label className="row-label-col" htmlFor="countdown-target" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+											<span className="blue-help-bubble" title="Specify the deadline date and time for the countdown timer">?</span>
+											<span>Specific End Date & Time</span>
+										</label>
 										<div className="row-control-col">
-											<input
-												id="countdown-target"
-												type="datetime-local"
-												className="text-field-input"
-												value={config.countdownTarget}
-												onChange={(e) => update("countdownTarget", e.target.value)}
-											/>
+											<div style={{ position: "relative", maxWidth: "480px" }}>
+												<Clock size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", pointerEvents: "none" }} />
+												<input
+													id="countdown-target"
+													type="text"
+													className="text-field-input"
+													style={{ paddingLeft: "36px" }}
+													value={config.countdownTarget ?? "2026-10-25 11:16:55"}
+													onChange={(e) => update("countdownTarget", e.target.value)}
+													placeholder="2026-10-25 11:16:55"
+												/>
+											</div>
 										</div>
 									</div>
+
+									{/* Row 2: Timezone */}
 									<div className="form-row">
-										<label className="row-label-col" htmlFor="countdown-urgency">Urgency Label</label>
+										<label className="row-label-col" htmlFor="countdown-timezone" style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+											Timezone
+										</label>
 										<div className="row-control-col">
-											<input
-												id="countdown-urgency"
-												type="text"
-												className="text-field-input"
-												value={config.countdownUrgencyText}
-												onChange={(e) => update("countdownUrgencyText", e.target.value)}
-												placeholder="e.g. Flash sale ends in:"
-											/>
+											<select
+												id="countdown-timezone"
+												className="text-field-select"
+												style={{ maxWidth: "480px" }}
+												value={config.countdownTimezone || "Eritrea/Asmara"}
+												onChange={(e) => update("countdownTimezone", e.target.value)}
+											>
+												<option value="Eritrea/Asmara">Eritrea/Asmara</option>
+												<option value="UTC">UTC</option>
+												<option value="America/New_York">America/New_York</option>
+												<option value="America/Chicago">America/Chicago</option>
+												<option value="America/Denver">America/Denver</option>
+												<option value="America/Los_Angeles">America/Los_Angeles</option>
+												<option value="Europe/London">Europe/London</option>
+												<option value="Europe/Paris">Europe/Paris</option>
+												<option value="Europe/Berlin">Europe/Berlin</option>
+												<option value="Asia/Dubai">Asia/Dubai</option>
+												<option value="Asia/Kolkata">Asia/Kolkata</option>
+												<option value="Asia/Singapore">Asia/Singapore</option>
+												<option value="Asia/Tokyo">Asia/Tokyo</option>
+												<option value="Australia/Sydney">Australia/Sydney</option>
+											</select>
 										</div>
 									</div>
+
+									{/* Row 3: Hide Lable */}
+									<div className="form-row">
+										<label className="row-label-col" style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+											Hide Lable
+										</label>
+										<div className="row-control-col">
+											<label className="switch-root" aria-label="Toggle Hide Lable">
+												<div className={`switch-track ${config.countdownHideLabels ? "on" : ""}`}>
+													<div className="switch-thumb" />
+												</div>
+												<span className="switch-label-text">{config.countdownHideLabels ? "ON" : "OFF"}</span>
+												<input
+													type="checkbox"
+													checked={Boolean(config.countdownHideLabels)}
+													onChange={(e) => update("countdownHideLabels", e.target.checked)}
+													style={{ display: "none" }}
+												/>
+											</label>
+										</div>
+									</div>
+
+									{/* Row 4: Change Lable */}
+									{!config.countdownHideLabels && (
+										<div className="form-row">
+											<label className="row-label-col" style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+												Change Lable
+											</label>
+											<div className="row-control-col">
+												<label className="switch-root" aria-label="Toggle Change Lable">
+													<div className={`switch-track ${config.countdownChangeLabels !== false ? "on" : ""}`}>
+														<div className="switch-thumb" />
+													</div>
+													<span className="switch-label-text">{config.countdownChangeLabels !== false ? "ON" : "OFF"}</span>
+													<input
+														type="checkbox"
+														checked={config.countdownChangeLabels !== false}
+														onChange={(e) => update("countdownChangeLabels", e.target.checked)}
+														style={{ display: "none" }}
+													/>
+												</label>
+
+												{config.countdownChangeLabels !== false && (
+													<div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "12px", marginTop: "12px", maxWidth: "600px" }}>
+														<div>
+															<label style={{ display: "block", fontSize: "12px", color: "#64748b", marginBottom: "4px" }}>Days</label>
+															<input
+																type="text"
+																className="text-field-input"
+																value={config.countdownDaysLabel ?? "Days"}
+																onChange={(e) => update("countdownDaysLabel", e.target.value)}
+																placeholder="Days"
+															/>
+														</div>
+														<div>
+															<label style={{ display: "block", fontSize: "12px", color: "#64748b", marginBottom: "4px" }}>Hours</label>
+															<input
+																type="text"
+																className="text-field-input"
+																value={config.countdownHoursLabel ?? "Hours"}
+																onChange={(e) => update("countdownHoursLabel", e.target.value)}
+																placeholder="Hours"
+															/>
+														</div>
+														<div>
+															<label style={{ display: "block", fontSize: "12px", color: "#64748b", marginBottom: "4px" }}>Minutes</label>
+															<input
+																type="text"
+																className="text-field-input"
+																value={config.countdownMinutesLabel ?? "Minutes"}
+																onChange={(e) => update("countdownMinutesLabel", e.target.value)}
+																placeholder="Minutes"
+															/>
+														</div>
+														<div>
+															<label style={{ display: "block", fontSize: "12px", color: "#64748b", marginBottom: "4px" }}>Seconds</label>
+															<input
+																type="text"
+																className="text-field-input"
+																value={config.countdownSecondsLabel ?? "Seconds"}
+																onChange={(e) => update("countdownSecondsLabel", e.target.value)}
+																placeholder="Seconds"
+															/>
+														</div>
+													</div>
+												)}
+											</div>
+										</div>
+									)}
 								</div>
 							)}
 						</div>
@@ -2808,7 +3381,34 @@ export function CustomizeBarPage() {
 									<input
 										type="checkbox"
 										checked={config.leadFormEnabled}
-										onChange={(e) => update("leadFormEnabled", e.target.checked)}
+										onChange={(e) => {
+											const checked = e.target.checked;
+											const hadCountdown = Boolean(config.countdownEnabled);
+											setConfig((prev) => {
+												const hasNoDevices = !prev.buttonDevices || prev.buttonDevices.length === 0;
+												const hasNoText = !prev.buttonText || !prev.buttonText.trim();
+												return {
+													...prev,
+													leadFormEnabled: checked,
+													countdownEnabled: checked ? false : prev.countdownEnabled,
+													buttonDevices: (checked && hasNoDevices) ? ["desktop", "mobile"] : prev.buttonDevices,
+													buttonText: (checked && hasNoText) ? (prev.leadFormButtonLabel || "Join") : prev.buttonText,
+												};
+											});
+											if (checked) {
+												if (hadCountdown) {
+													setToast({
+														message: "Contact Lead Form enabled: Countdown has been disabled.",
+														type: "info",
+													});
+												} else {
+													setToast({
+														message: "Button automatically enabled for Contact Lead Form",
+														type: "info",
+													});
+												}
+											}
+										}}
 										style={{ display: "none" }}
 									/>
 								</label>
@@ -2818,41 +3418,172 @@ export function CustomizeBarPage() {
 							</p>
 
 							{config.leadFormEnabled && (
-								<div className="feature-expanded-panel">
+								<div className="feature-expanded-panel" style={{ borderTop: "1px solid #f1f5f9", marginTop: "16px", paddingTop: "16px" }}>
+									{/* Row 1: Name Placeholder */}
 									<div className="form-row">
-										<label className="row-label-col" htmlFor="lead-placeholder">Input Placeholder</label>
+										<label className="row-label-col" htmlFor="lead-name-placeholder" style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+											Name Placeholder
+										</label>
 										<div className="row-control-col">
 											<input
-												id="lead-placeholder"
+												id="lead-name-placeholder"
 												type="text"
 												className="text-field-input"
-												value={config.leadFormPlaceholder}
-												onChange={(e) => update("leadFormPlaceholder", e.target.value)}
+												style={{ maxWidth: "480px" }}
+												value={config.leadNamePlaceholder ?? "Enter your name"}
+												onChange={(e) => update("leadNamePlaceholder", e.target.value)}
+												placeholder="Enter your name"
 											/>
 										</div>
 									</div>
+
+									{/* Row 2: Email Placeholder */}
 									<div className="form-row">
-										<label className="row-label-col" htmlFor="lead-btn-label">Submit Button Label</label>
+										<label className="row-label-col" htmlFor="lead-email-placeholder" style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+											Email Placeholder
+										</label>
 										<div className="row-control-col">
 											<input
-												id="lead-btn-label"
+												id="lead-email-placeholder"
 												type="text"
 												className="text-field-input"
-												value={config.leadFormButtonLabel}
-												onChange={(e) => update("leadFormButtonLabel", e.target.value)}
+												style={{ maxWidth: "480px" }}
+												value={config.leadEmailPlaceholder ?? "Enter your email address"}
+												onChange={(e) => {
+													const val = e.target.value;
+													setConfig((prev) => ({
+														...prev,
+														leadEmailPlaceholder: val,
+														leadFormPlaceholder: val,
+													}));
+												}}
+												placeholder="Enter your email address"
 											/>
 										</div>
 									</div>
+
+									{/* Row 3: Send Leads Mail */}
+									<div className="form-row">
+										<label className="row-label-col" style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+											Send Leads Mail
+										</label>
+										<div className="row-control-col">
+											<label className="switch-root" aria-label="Toggle Send Leads Mail">
+												<div className={`switch-track ${config.leadSendMail !== false ? "on" : ""}`}>
+													<div className="switch-thumb" />
+												</div>
+												<span className="switch-label-text">{config.leadSendMail !== false ? "ON" : "OFF"}</span>
+												<input
+													type="checkbox"
+													checked={config.leadSendMail !== false}
+													onChange={(e) => update("leadSendMail", e.target.checked)}
+													style={{ display: "none" }}
+												/>
+											</label>
+										</div>
+									</div>
+
+									{config.leadSendMail !== false && (
+										<>
+											{/* Row 4: Email address */}
+											<div className="form-row">
+												<label className="row-label-col" htmlFor="lead-recipient-email" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+													<span className="blue-help-bubble" title="Email address to receive collected leads">?</span>
+													<span>Email address</span>
+												</label>
+												<div className="row-control-col">
+													<input
+														id="lead-recipient-email"
+														type="email"
+														className="text-field-input"
+														style={{ maxWidth: "480px" }}
+														value={config.leadEmailAddress ?? "kokenap418@copytosh.com"}
+														onChange={(e) => update("leadEmailAddress", e.target.value)}
+														placeholder="kokenap418@copytosh.com"
+													/>
+												</div>
+											</div>
+
+											{/* Row 5: Sender's name */}
+											<div className="form-row">
+												<label className="row-label-col" htmlFor="lead-sender-name" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+													<span className="blue-help-bubble" title="Sender name template for notification emails">?</span>
+													<span>Sender's name</span>
+												</label>
+												<div className="row-control-col">
+													<input
+														id="lead-sender-name"
+														type="text"
+														className="text-field-input"
+														style={{ maxWidth: "480px" }}
+														value={config.leadSenderName ?? "{name}"}
+														onChange={(e) => update("leadSenderName", e.target.value)}
+														placeholder="{name}"
+													/>
+												</div>
+											</div>
+
+											{/* Row 6: Email subject */}
+											<div className="form-row">
+												<label className="row-label-col" htmlFor="lead-email-subject" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+													<span className="blue-help-bubble" title="Subject line for lead notification email">?</span>
+													<span>Email subject</span>
+												</label>
+												<div className="row-control-col">
+													<input
+														id="lead-email-subject"
+														type="text"
+														className="text-field-input"
+														style={{ maxWidth: "480px" }}
+														value={config.leadEmailSubject ?? "New lead from my announcement bar from {name} on {date} {hours}"}
+														onChange={(e) => update("leadEmailSubject", e.target.value)}
+														placeholder="New lead from my announcement bar from {name} on {date} {hours}"
+													/>
+													<div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
+														{["{name}", "{email}", "{date}", "{hours}"].map((tag) => (
+															<button
+																key={tag}
+																type="button"
+																onClick={() => {
+																	setConfig((prev) => ({
+																		...prev,
+																		leadEmailSubject: (prev.leadEmailSubject ?? "New lead from my announcement bar from {name} on {date} {hours}") + " " + tag,
+																	}));
+																}}
+																style={{
+																	display: "inline-flex",
+																	alignItems: "center",
+																	padding: "3px 12px",
+																	borderRadius: "9999px",
+																	background: "#3b82f6",
+																	color: "#ffffff",
+																	fontSize: "12px",
+																	fontWeight: 600,
+																	border: "none",
+																	cursor: "pointer",
+																	transition: "all 0.15s ease",
+																	lineHeight: 1.4,
+																}}
+																title={`Add ${tag} to subject`}
+															>
+																{tag}
+															</button>
+														))}
+													</div>
+												</div>
+											</div>
+										</>
+									)}
 								</div>
 							)}
 						</div>
 
 						{/* Optional Feature Card: Discount */}
-						<div className="editor-card">
+						<div className="editor-card" id="discount-feature-card">
 							<div className="card-header-row">
 								<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-									<Tag size={20} weight="bold" style={{ color: "#16a34a" }} />
-									<h2 className="card-title">Discount</h2>
+									<Tag size={20} weight="regular" style={{ color: "#64748b" }} />
+									<h2 className="card-title" style={{ fontSize: "16px", fontWeight: 700, margin: 0 }}>Discount</h2>
 								</div>
 								<label className="switch-root" aria-label="Toggle Discount">
 									<div className={`switch-track ${config.discountEnabled ? "on" : ""}`}>
@@ -2860,42 +3591,214 @@ export function CustomizeBarPage() {
 									</div>
 									<span className="switch-label-text">{config.discountEnabled ? "ON" : "OFF"}</span>
 									<input
+										id="discount-toggle-checkbox"
 										type="checkbox"
 										checked={config.discountEnabled}
-										onChange={(e) => update("discountEnabled", e.target.checked)}
+										onChange={(e) => {
+											const checked = e.target.checked;
+											setConfig((prev) => {
+												const nextShowWhen = prev.showCouponWhen || "claims_it";
+												const isClaimsIt = nextShowWhen === "claims_it";
+												const hasNoDevices = !prev.buttonDevices || prev.buttonDevices.length === 0;
+												const hasNoText = !prev.buttonText || !prev.buttonText.trim();
+												return {
+													...prev,
+													discountEnabled: checked,
+													showCouponWhen: nextShowWhen,
+													buttonDevices: (checked && isClaimsIt && hasNoDevices) ? ["desktop", "mobile"] : prev.buttonDevices,
+													buttonText: (checked && isClaimsIt && hasNoText) ? "Claim Coupon" : prev.buttonText,
+													actionOnClick: (checked && isClaimsIt) ? "show_coupon" : prev.actionOnClick,
+													couponCode: prev.couponCode && prev.couponCode !== "WELCOME30" ? prev.couponCode : "COUPON CODE",
+													couponBarText: prev.couponBarText || "Click to copy your coupon",
+													copiedTooltipText: prev.copiedTooltipText || "copied",
+												};
+											});
+										}}
 										style={{ display: "none" }}
 									/>
 								</label>
 							</div>
-							<p className="card-subtitle" style={{ margin: "4px 0 0 28px" }}>
+							<p className="card-subtitle" style={{ margin: "4px 0 0 30px", fontSize: "13px", color: "#64748b" }}>
 								Add a coupon to your bar. Users can click on the coupon, copy it and use it on your website.
 							</p>
 
 							{config.discountEnabled && (
-								<div className="feature-expanded-panel">
+								<div className="feature-expanded-panel" style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
+									{/* Row 1: Show Coupon When */}
 									<div className="form-row">
-										<label className="row-label-col" htmlFor="discount-code">Coupon Code</label>
+										<label className="row-label-col" htmlFor="show-coupon-when" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+											<span className="blue-help-bubble">?</span>
+											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Show Coupon When</span>
+										</label>
+										<div className="row-control-col">
+											<select
+												id="show-coupon-when"
+												className="text-field-select"
+												style={{ maxWidth: "420px" }}
+												value={config.showCouponWhen === "rightaway" ? "rightaway" : "claims_it"}
+												onChange={(e) => {
+													const val = e.target.value;
+													if (val === "claims_it") {
+														setConfig((prev) => {
+															const hasNoDevices = !prev.buttonDevices || prev.buttonDevices.length === 0;
+															const hasNoText = !prev.buttonText || !prev.buttonText.trim();
+															return {
+																...prev,
+																showCouponWhen: "claims_it",
+																buttonDevices: hasNoDevices ? ["desktop", "mobile"] : prev.buttonDevices,
+																buttonText: hasNoText ? "Claim Coupon" : prev.buttonText,
+																actionOnClick: "show_coupon",
+															};
+														});
+														setPreviewCouponShown(false);
+														setToast({
+															message: "Button automatically enabled for Claim Coupon",
+															type: "info",
+														});
+													} else {
+														update("showCouponWhen", val);
+													}
+												}}
+											>
+												<option value="rightaway">Display rightaway</option>
+												<option value="claims_it">Claims it</option>
+											</select>
+											{config.showCouponWhen === "rightaway" && (
+												<p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+													💡 Coupon code and Coupon Bar Text are displayed right away. The button, icon, and main text will not be displayed.
+												</p>
+											)}
+											{config.showCouponWhen === "claims_it" && (
+												<p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+													💡 The CTA button (or contact form) is enabled. Submitting the button or contact form will display the coupon code with the coupon bar text.
+												</p>
+											)}
+										</div>
+									</div>
+
+									{/* Row 2: Coupon Code */}
+									<div className="form-row">
+										<label className="row-label-col" htmlFor="discount-code" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+											<span className="blue-help-bubble">?</span>
+											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Coupon Code</span>
+										</label>
 										<div className="row-control-col">
 											<input
 												id="discount-code"
 												type="text"
 												className="text-field-input"
-												value={config.couponCode}
+												style={{ maxWidth: "420px" }}
+												value={config.couponCode || "COUPON CODE"}
 												onChange={(e) => update("couponCode", e.target.value)}
-												placeholder="e.g. WELCOME30"
+												placeholder="COUPON CODE"
 											/>
 										</div>
 									</div>
+
+									{/* Row 3: Coupon Bar Text */}
 									<div className="form-row">
-										<label className="row-label-col" htmlFor="discount-desc">Discount Description</label>
+										<label className="row-label-col" htmlFor="coupon-bar-text" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+											<span className="blue-help-bubble">?</span>
+											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Coupon Bar Text</span>
+										</label>
+										<div className="row-control-col">
+											<div className="rich-text-wrapper" style={{ maxWidth: "620px" }}>
+												<div className="rich-toolbar">
+													<button
+														type="button"
+														className={`rich-btn ${couponFormats.bold ? "active" : ""}`}
+														onMouseDown={(e) => {
+															e.preventDefault();
+															applyCouponFormat("bold");
+														}}
+														title="Bold"
+													>
+														<TextB size={14} weight="bold" />
+													</button>
+													<button
+														type="button"
+														className={`rich-btn ${couponFormats.italic ? "active" : ""}`}
+														onMouseDown={(e) => {
+															e.preventDefault();
+															applyCouponFormat("italic");
+														}}
+														title="Italic"
+													>
+														<TextItalic size={14} weight="bold" />
+													</button>
+													<button
+														type="button"
+														className={`rich-btn ${couponFormats.underline ? "active" : ""}`}
+														onMouseDown={(e) => {
+															e.preventDefault();
+															applyCouponFormat("underline");
+														}}
+														title="Underline"
+													>
+														<TextUnderline size={14} weight="bold" />
+													</button>
+													<button
+														type="button"
+														className="rich-btn"
+														onMouseDown={(e) => {
+															e.preventDefault();
+															const url = prompt("Enter link URL:", "https://example.com");
+															if (url !== null) {
+																applyCouponFormat("createLink", url);
+															}
+														}}
+														title="Link"
+													>
+														<LinkSimple size={15} weight="bold" />
+													</button>
+													<button
+														type="button"
+														className="rich-btn"
+														onMouseDown={(e) => {
+															e.preventDefault();
+															applyCouponFormat("insertText", "🏷️");
+														}}
+														title="Insert Emoji"
+													>
+														<Smiley size={15} weight="bold" />
+													</button>
+												</div>
+												<div
+													id="coupon-bar-rich-text"
+													ref={couponEditorRef}
+													className="rich-textarea"
+													contentEditable
+													suppressContentEditableWarning
+													onInput={handleCouponEditorInput}
+													onBlur={handleCouponEditorInput}
+													onKeyUp={checkCouponFormatting}
+													onMouseUp={checkCouponFormatting}
+													onSelect={checkCouponFormatting}
+													data-placeholder="Click to copy your coupon"
+													style={{ minHeight: "90px" }}
+												/>
+												<div className="rich-footer">
+													<span>p</span>
+												</div>
+											</div>
+										</div>
+									</div>
+
+									{/* Row 4: Copied Tooltip Text */}
+									<div className="form-row">
+										<label className="row-label-col" htmlFor="copied-tooltip-text" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+											<span className="blue-help-bubble">?</span>
+											<span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>Copied Tooltip Text</span>
+										</label>
 										<div className="row-control-col">
 											<input
-												id="discount-desc"
+												id="copied-tooltip-text"
 												type="text"
 												className="text-field-input"
-												value={config.discountText}
-												onChange={(e) => update("discountText", e.target.value)}
-												placeholder="e.g. 30% off your entire cart"
+												style={{ maxWidth: "420px" }}
+												value={config.copiedTooltipText || "copied"}
+												onChange={(e) => update("copiedTooltipText", e.target.value)}
+												placeholder="copied"
 											/>
 										</div>
 									</div>

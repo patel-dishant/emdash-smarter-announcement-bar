@@ -30,12 +30,29 @@ export interface BarConfig {
 	thankYouMessage?: string;
 	barAppearanceAfterClick: "dont_show" | "next_session" | "always";
 	countdownEnabled: boolean;
-	countdownUrgencyText: string;
 	countdownTarget: string;
+	countdownUrgencyText?: string;
+	countdownTimezone?: string;
+	countdownHideLabels?: boolean;
+	countdownChangeLabels?: boolean;
+	countdownDaysLabel?: string;
+	countdownHoursLabel?: string;
+	countdownMinutesLabel?: string;
+	countdownSecondsLabel?: string;
 	leadFormEnabled: boolean;
+	leadNamePlaceholder?: string;
+	leadEmailPlaceholder?: string;
 	leadFormButtonLabel: string;
+	leadSendMail?: boolean;
+	leadEmailAddress?: string;
+	leadSenderName?: string;
+	leadEmailSubject?: string;
 	discountEnabled: boolean;
 	discountCode: string;
+	showCouponWhen?: "rightaway" | "claims_it" | "after_click" | string;
+	couponBarText?: string;
+	couponCode?: string;
+	copiedTooltipText?: string;
 	backgroundColor: string;
 	textColor: string;
 	buttonBackgroundColor: string;
@@ -58,10 +75,23 @@ const DEFAULT_CONFIG: BarConfig = {
 	actionOnClick: "close",
 	barAppearanceAfterClick: "dont_show",
 	countdownEnabled: false,
-	countdownUrgencyText: "Ends in:",
-	countdownTarget: new Date(Date.now() + 86400000).toISOString(),
+	countdownTarget: "2026-10-25 11:16:55",
+	countdownUrgencyText: "",
+	countdownTimezone: "Eritrea/Asmara",
+	countdownHideLabels: false,
+	countdownChangeLabels: true,
+	countdownDaysLabel: "Days",
+	countdownHoursLabel: "Hours",
+	countdownMinutesLabel: "Minutes",
+	countdownSecondsLabel: "Seconds",
 	leadFormEnabled: false,
+	leadNamePlaceholder: "Enter your name",
+	leadEmailPlaceholder: "Enter your email address",
 	leadFormButtonLabel: "Join",
+	leadSendMail: true,
+	leadEmailAddress: "kokenap418@copytosh.com",
+	leadSenderName: "{name}",
+	leadEmailSubject: "New lead from my announcement bar from {name} on {date} {hours}",
 	discountEnabled: false,
 	discountCode: "SAVE30",
 	backgroundColor: "#84cc16",
@@ -119,28 +149,67 @@ export function renderPublicBar(config: BarConfig): string {
 		isMarquee ? "pre" : "pre-wrap"
 	}; word-break: break-word;`;
 
-	const countdownHtml = config.countdownEnabled
-		? `<span style="margin-left: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,0.15); font-weight: bold; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;"><svg width="13" height="13" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: middle;"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"></path></svg> ${
-				config.countdownUrgencyText || "Ends in:"
-		  } 02:45:12</span>`
+	const hasButtonDesktop = config.buttonDevices ? config.buttonDevices.includes("desktop") : true;
+	const hasButtonMobile = config.buttonDevices ? config.buttonDevices.includes("mobile") : true;
+	const isButtonActive = Boolean((hasButtonDesktop || hasButtonMobile) && config.buttonText);
+	const isLeadFormActive = Boolean(anyConfig.leadFormEnabled && isButtonActive);
+	const isCountdownActive = Boolean(config.countdownEnabled && !isLeadFormActive);
+
+	const countdownHtml = isCountdownActive
+		? `<div id="smarter-countdown-root" class="smarter-countdown-root" data-target="${anyConfig.countdownTarget || "2026-10-25 11:16:55"}" data-tz="${anyConfig.countdownTimezone || "Eritrea/Asmara"}">
+				<div class="smarter-countdown-unit">
+					<div class="smarter-countdown-digits">
+						<span class="smarter-countdown-digit-box" data-unit="d0">0</span>
+						<span class="smarter-countdown-digit-box" data-unit="d1">0</span>
+					</div>
+					${!anyConfig.countdownHideLabels ? `<span class="smarter-countdown-unit-label">${anyConfig.countdownDaysLabel || "Days"}</span>` : ""}
+				</div>
+				<span class="smarter-countdown-colon">:</span>
+				<div class="smarter-countdown-unit">
+					<div class="smarter-countdown-digits">
+						<span class="smarter-countdown-digit-box" data-unit="h0">0</span>
+						<span class="smarter-countdown-digit-box" data-unit="h1">0</span>
+					</div>
+					${!anyConfig.countdownHideLabels ? `<span class="smarter-countdown-unit-label">${anyConfig.countdownHoursLabel || "Hours"}</span>` : ""}
+				</div>
+				<span class="smarter-countdown-colon">:</span>
+				<div class="smarter-countdown-unit">
+					<div class="smarter-countdown-digits">
+						<span class="smarter-countdown-digit-box" data-unit="m0">0</span>
+						<span class="smarter-countdown-digit-box" data-unit="m1">0</span>
+					</div>
+					${!anyConfig.countdownHideLabels ? `<span class="smarter-countdown-unit-label">${anyConfig.countdownMinutesLabel || "Minutes"}</span>` : ""}
+				</div>
+				<span class="smarter-countdown-colon">:</span>
+				<div class="smarter-countdown-unit">
+					<div class="smarter-countdown-digits">
+						<span class="smarter-countdown-digit-box" data-unit="s0">0</span>
+						<span class="smarter-countdown-digit-box" data-unit="s1">0</span>
+					</div>
+					${!anyConfig.countdownHideLabels ? `<span class="smarter-countdown-unit-label">${anyConfig.countdownSecondsLabel || "Seconds"}</span>` : ""}
+				</div>
+		   </div>`
 		: "";
 
-	const discountHtml = config.discountEnabled
-		? `<span style="margin-left: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.25); border: 1px dashed currentColor; font-weight: bold; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" onclick="navigator.clipboard.writeText('${couponCode}'); alert('Copied coupon: ${couponCode}');"><svg width="13" height="13" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: middle;"><path d="M243.31,136,144,36.69A15.86,15.86,0,0,0,132.69,32H40a8,8,0,0,0-8,8v92.69A15.86,15.86,0,0,0,36.69,144L136,243.31a16,16,0,0,0,22.63,0l84.68-84.68A16,16,0,0,0,243.31,136ZM84,96A12,12,0,1,1,96,84,12,12,0,0,1,84,96Z"></path></svg> ${couponCode}</span>`
-		: "";
+	const couponTextTitle = anyConfig.couponBarText ? anyConfig.couponBarText.replace(/<[^>]*>/g, "") : "Click to copy your coupon";
+	const copiedTip = (anyConfig.copiedTooltipText || "copied").replace(/"/g, "&quot;");
+	const couponBadgeHtml = `<span class="smarter-coupon-badge" style="position: relative; margin-left: 12px; display: inline-flex; align-items: center; justify-content: center; padding: 2px 3px; border: 2px dashed #ffffff; border-radius: 6px; cursor: pointer; vertical-align: middle; user-select: none;" onclick="copySmarterCoupon(this, '${couponCode}', '${copiedTip}')" title="${couponTextTitle}"><span class="smarter-coupon-code-pill" style="background: #ffffff; color: #000000; padding: 3px 12px; border-radius: 4px; font-weight: bold; font-size: 13px; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 5px; line-height: 1.3; transition: all 0.2s ease;"><span class="smarter-coupon-text-inner">${couponCode}</span></span><span class="smarter-copied-tooltip" style="display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #0f172a; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 99999;"><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: -1px; margin-right: 4px; color: #22c55e;"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>${copiedTip}<span style="position: absolute; top: 100%; left: 50%; margin-left: -4px; border-width: 4px; border-style: solid; border-color: #0f172a transparent transparent transparent;"></span></span></span>`;
+	const showDiscountRightaway = Boolean(
+		config.discountEnabled &&
+		config.showCouponWhen === "rightaway"
+	);
+	const discountHtml = showDiscountRightaway ? couponBadgeHtml : "";
 
-	const leadFormHtml = anyConfig.leadFormEnabled
-		? `<form style="display: flex; gap: 6px; align-items: center; margin: 0 4px;" onsubmit="event.preventDefault(); alert('Subscribed: ' + this.elements.email.value); this.reset();">
-				<input type="email" name="email" placeholder="${anyConfig.leadFormPlaceholder || "Enter your email"}" required style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111;" />
-				<button type="submit" style="background-color: ${config.buttonBackgroundColor || "#000000"}; color: ${config.buttonTextColor || "#ffffff"}; border: none; border-radius: 4px; padding: 5px 12px; font-weight: 600; font-size: 13px; cursor: pointer;">${anyConfig.leadFormButtonLabel || "Join"}</button>
+	const leadFormHtml = (!showDiscountRightaway && isLeadFormActive)
+		? `<form id="smarter-lead-form" class="smarter-lead-form" style="display: flex; gap: 6px; align-items: center; margin: 0 4px;" onsubmit="event.preventDefault(); handleSmarterLeadSubmit(this);">
+				<input type="text" id="smarter-lead-name" name="name" placeholder="${anyConfig.leadNamePlaceholder || "Enter your name"}" style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 120px;" />
+				<input type="email" id="smarter-lead-email" name="email" placeholder="${anyConfig.leadEmailPlaceholder || anyConfig.leadFormPlaceholder || "Enter your email address"}" required style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 160px;" />
 		   </form>`
 		: "";
 
-	const hasButtonDesktop = config.buttonDevices ? config.buttonDevices.includes("desktop") : true;
-	const hasButtonMobile = config.buttonDevices ? config.buttonDevices.includes("mobile") : true;
 	const buttonDeviceClass = (!hasButtonDesktop && hasButtonMobile) ? "hide-on-desktop" : (hasButtonDesktop && !hasButtonMobile) ? "hide-on-mobile" : (!hasButtonDesktop && !hasButtonMobile) ? "hide-always" : "";
 
-	const buttonHtml = config.buttonText
+	const buttonHtml = (!showDiscountRightaway && isButtonActive)
 		? `<button type="button" class="smarter-cta-btn ${effectClass} ${buttonDeviceClass}" style="background-color: ${
 				config.buttonBackgroundColor || "#000000"
 		  }; color: ${
@@ -185,17 +254,19 @@ export function renderPublicBar(config: BarConfig): string {
 		isBadge ? "background: #ffffff; border-radius: 50%; padding: 3px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);" : "",
 	].filter(Boolean).join("; ");
 
-	const iconHtml = (config.textIcon && config.textIcon.dataUrl)
+	const iconHtml = (!showDiscountRightaway && config.textIcon && config.textIcon.dataUrl)
 		? `<img src="${config.textIcon.dataUrl}" style="${iconImgStyle}" alt="icon" />`
 		: "";
 	const isIconRight = config.iconPosition === "right";
 
-	const rawMessages: string[] = (config.messages && config.messages.length > 0)
-		? config.messages
-		: (config.text ? config.text.split("\n") : []);
+	const rawMessages: string[] = showDiscountRightaway
+		? [anyConfig.couponBarText || "Click to copy your coupon"]
+		: ((config.messages && config.messages.length > 0)
+			? config.messages
+			: (config.text ? config.text.split("\n") : []));
 	const messages = rawMessages.map((m) => (m || "").trim()).filter(Boolean);
 	if (messages.length === 0) {
-		messages.push(config.text || "Get 30% off your first purchase");
+		messages.push(showDiscountRightaway ? (anyConfig.couponBarText || "Click to copy your coupon") : (config.text || "Get 30% off your first purchase"));
 	}
 
 	const formatText = (content: string) => {
@@ -350,6 +421,14 @@ export function renderPublicBar(config: BarConfig): string {
 			gap: 8px;
 			white-space: pre-wrap;
 			word-break: break-word;
+			overflow: visible;
+		}
+		.smarter-copied-tooltip {
+			animation: smarterTooltipIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+		}
+		@keyframes smarterTooltipIn {
+			from { opacity: 0; transform: translate(-50%, 4px); }
+			to { opacity: 1; transform: translate(-50%, 0); }
 		}
 		.smarter-content-container b,
 		.smarter-content-container strong,
@@ -420,14 +499,70 @@ export function renderPublicBar(config: BarConfig): string {
 				gap: 8px;
 			}
 		}
+		.smarter-countdown-root {
+			display: inline-flex;
+			align-items: center;
+			gap: 3px;
+			user-select: none;
+		}
+		.smarter-countdown-unit {
+			display: inline-flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+		}
+		.smarter-countdown-digits {
+			display: inline-flex;
+			align-items: center;
+			gap: 2px;
+		}
+		.smarter-countdown-digit-box {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 17px;
+			height: 22px;
+			background: #ffffff;
+			color: #000000;
+			border: 1px solid rgba(0, 0, 0, 0.25);
+			border-radius: 3px;
+			font-size: 13px;
+			font-weight: 700;
+			line-height: 1;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+		}
+		.smarter-countdown-colon {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			height: 22px;
+			font-size: 13px;
+			font-weight: 700;
+			color: inherit;
+			padding: 0 2px;
+			line-height: 1;
+		}
+		.smarter-countdown-unit-label {
+			font-size: 10px;
+			font-weight: 600;
+			color: inherit;
+			margin-top: 2px;
+			text-align: center;
+			line-height: 1.1;
+			letter-spacing: -0.2px;
+		}
 	</style>
 	<div id="smarter-announcement-bar-root" class="${config.position === "bottom" ? "is-bottom" : "is-top"}">
 		${
-			isMarquee
+			showDiscountRightaway
+				? `<div class="smarter-content-container is-static">
+						<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${anyConfig.couponBarText || "Click to copy your coupon"}</span>
+						${discountHtml}
+				   </div>`
+				: isMarquee
 				? `<div class="smarter-content-container is-marquee">
 						<div class="smarter-ticker-track">
 							${marqueeItemsHtml}
-							${countdownHtml}
 							${discountHtml}
 						</div>
 				   </div>`
@@ -441,17 +576,61 @@ export function renderPublicBar(config: BarConfig): string {
 						${isIconRight ? "" : iconHtml}
 						<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${formatText(config.text || messages[0])}</span>
 						${isIconRight ? iconHtml : ""}
-						${countdownHtml}
 						${discountHtml}
 						${leadFormHtml}
 				   </div>`
 		}
 		<div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+			${countdownHtml}
 			${buttonHtml}
 			${closeHtml}
 		</div>
 	</div>
 	<script>
+		(function initCountdown() {
+			var root = document.getElementById('smarter-countdown-root');
+			if (!root) return;
+			var targetRaw = root.getAttribute('data-target') || '';
+			function tick() {
+				if (!targetRaw) return;
+				var target = new Date(targetRaw.replace(' ', 'T'));
+				if (isNaN(target.getTime())) target = new Date(targetRaw);
+				var diff = 0;
+				if (!isNaN(target.getTime())) {
+					diff = Math.max(0, target.getTime() - Date.now());
+				}
+				var s = Math.floor(diff / 1000);
+				var days = Math.floor(s / 86400);
+				var hours = Math.floor((s % 86400) / 3600);
+				var mins = Math.floor((s % 3600) / 60);
+				var secs = s % 60;
+
+				var dStr = String(days).padStart(2, '0');
+				var hStr = String(hours).padStart(2, '0');
+				var mStr = String(mins).padStart(2, '0');
+				var sStr = String(secs).padStart(2, '0');
+
+				var d0 = root.querySelector('[data-unit="d0"]');
+				var d1 = root.querySelector('[data-unit="d1"]');
+				var h0 = root.querySelector('[data-unit="h0"]');
+				var h1 = root.querySelector('[data-unit="h1"]');
+				var m0 = root.querySelector('[data-unit="m0"]');
+				var m1 = root.querySelector('[data-unit="m1"]');
+				var s0 = root.querySelector('[data-unit="s0"]');
+				var s1 = root.querySelector('[data-unit="s1"]');
+
+				if (d0) d0.textContent = dStr[0] || '0';
+				if (d1) d1.textContent = dStr[1] || '0';
+				if (h0) h0.textContent = hStr[0] || '0';
+				if (h1) h1.textContent = hStr[1] || '0';
+				if (m0) m0.textContent = mStr[0] || '0';
+				if (m1) m1.textContent = mStr[1] || '0';
+				if (s0) s0.textContent = sStr[0] || '0';
+				if (s1) s1.textContent = sStr[1] || '0';
+			}
+			tick();
+			setInterval(tick, 1000);
+		})();
 		(function() {
 			var barEl = document.getElementById('smarter-announcement-bar-root');
 			if (!barEl) return;
@@ -482,7 +661,7 @@ export function renderPublicBar(config: BarConfig): string {
 		})();
 		function dismissSmarterBar() {
 			var bar = document.getElementById('smarter-announcement-bar-root');
-			if (bar) bar.style.display = 'none';
+			if (bar) bar.style.setProperty('display', 'none', 'important');
 			document.body.style.paddingBottom = '0px';
 			var appearance = "${appearanceAfterClick}";
 			if (appearance === "dont_show") {
@@ -491,8 +670,112 @@ export function renderPublicBar(config: BarConfig): string {
 				sessionStorage.setItem('smarter_bar_dismissed', 'true');
 			}
 		}
+		function copySmarterCoupon(badgeEl, code, copiedText) {
+			if (navigator.clipboard) {
+				navigator.clipboard.writeText(code);
+			}
+			if (!badgeEl) return;
+			var pillEl = badgeEl.querySelector('.smarter-coupon-code-pill');
+			var innerEl = badgeEl.querySelector('.smarter-coupon-text-inner');
+			var tooltipEl = badgeEl.querySelector('.smarter-copied-tooltip');
+			var checkSvg = '<svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" style="display: inline-block; vertical-align: -1px; margin-right: 4px; color: #16a34a;"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></svg>';
+			
+			if (pillEl) {
+				pillEl.style.background = '#ecfdf5';
+				pillEl.style.color = '#065f46';
+			}
+			if (innerEl) {
+				innerEl.innerHTML = checkSvg + (copiedText || "copied");
+			}
+			if (tooltipEl) {
+				tooltipEl.style.display = 'inline-flex';
+				tooltipEl.style.alignItems = 'center';
+			}
+			
+			if (badgeEl._resetTimer) clearTimeout(badgeEl._resetTimer);
+			badgeEl._resetTimer = setTimeout(function() {
+				if (pillEl) {
+					pillEl.style.background = '#ffffff';
+					pillEl.style.color = '#000000';
+				}
+				if (innerEl) {
+					innerEl.textContent = code;
+				}
+				if (tooltipEl) {
+					tooltipEl.style.display = 'none';
+				}
+			}, 2200);
+		}
+		function handleSmarterLeadSubmit(form) {
+			var isClaimsIt = ${Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway")};
+			var nameVal = (form && form.elements && form.elements.name) ? form.elements.name.value : '';
+			var emailVal = (form && form.elements && form.elements.email) ? form.elements.email.value : '';
+			if (isClaimsIt) {
+				var bar = document.getElementById('smarter-announcement-bar-root');
+				if (bar) {
+					var content = bar.querySelector('.smarter-content-container');
+					if (content) {
+						content.className = 'smarter-content-container is-static';
+						content.innerHTML = '<span class="smarter-coupon-bar-text" style="white-space: pre-wrap; word-break: break-word; font-size: inherit;">' + ${JSON.stringify(anyConfig.couponBarText || "Click to copy your coupon")} + '</span> ' + ${JSON.stringify(couponBadgeHtml)};
+					}
+					var btn = bar.querySelector('.smarter-cta-btn');
+					if (btn) btn.style.display = 'none';
+				}
+				if (navigator.clipboard) {
+					navigator.clipboard.writeText("${couponCode}");
+				}
+				if (emailVal) {
+					try {
+						var leads = JSON.parse(localStorage.getItem('smarter_bar_subscribers') || '[]');
+						leads.push({ name: nameVal, email: emailVal, date: new Date().toISOString() });
+						localStorage.setItem('smarter_bar_subscribers', JSON.stringify(leads));
+						localStorage.setItem('smarter_bar_subscriber', emailVal);
+					} catch(e) {}
+				}
+			} else {
+				if (emailVal) {
+					try {
+						var leads = JSON.parse(localStorage.getItem('smarter_bar_subscribers') || '[]');
+						leads.push({ name: nameVal, email: emailVal, date: new Date().toISOString() });
+						localStorage.setItem('smarter_bar_subscribers', JSON.stringify(leads));
+					} catch(e) {}
+				}
+				if (form && typeof form.reset === 'function') form.reset();
+				dismissSmarterBar();
+			}
+		}
 		function handleSmarterBarCta() {
+			var isLeadForm = ${Boolean(isLeadFormActive)};
+			if (isLeadForm) {
+				var leadForm = document.getElementById('smarter-lead-form');
+				if (leadForm) {
+					var emailInput = leadForm.querySelector('input[type="email"]') || leadForm.querySelector('input');
+					if (emailInput && !emailInput.checkValidity()) {
+						emailInput.reportValidity();
+						return;
+					}
+					handleSmarterLeadSubmit(leadForm);
+					return;
+				}
+			}
+			var isClaimsIt = ${Boolean(config.discountEnabled && config.showCouponWhen !== "rightaway")};
 			var action = "${actionOnClick}";
+			if (isClaimsIt || action === "show_coupon" || action === "copy_code") {
+				var bar = document.getElementById('smarter-announcement-bar-root');
+				if (bar) {
+					var content = bar.querySelector('.smarter-content-container');
+					if (content) {
+						content.className = 'smarter-content-container is-static';
+						content.innerHTML = '<span class="smarter-coupon-bar-text" style="white-space: pre-wrap; word-break: break-word; font-size: inherit;">' + ${JSON.stringify(anyConfig.couponBarText || "Click to copy your coupon")} + '</span> ' + ${JSON.stringify(couponBadgeHtml)};
+					}
+					var btn = bar.querySelector('.smarter-cta-btn');
+					if (btn) btn.style.display = 'none';
+				}
+				if (navigator.clipboard) {
+					navigator.clipboard.writeText("${couponCode}");
+				}
+				return;
+			}
 			if (action === "close") {
 				dismissSmarterBar();
 			} else if (action === "open_url") {
@@ -512,11 +795,6 @@ export function renderPublicBar(config: BarConfig): string {
 					var btn = bar.querySelector('.smarter-cta-btn');
 					if (btn) btn.style.display = 'none';
 				}
-			} else if (action === "show_coupon" || action === "copy_code") {
-				if (navigator.clipboard) {
-					navigator.clipboard.writeText("${couponCode}");
-				}
-				alert("Coupon code: ${couponCode} (copied to clipboard!)");
 			}
 		}
 	</script>
