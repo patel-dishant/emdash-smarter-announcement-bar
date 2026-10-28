@@ -98,10 +98,17 @@ export interface BarConfig {
 	closeButtonColor?: string;
 	backgroundType?: "color" | "gradient" | "image";
 	backgroundGradient?: string;
+	gradientColorA?: string;
+	gradientColorB?: string;
+	gradientColorC?: string;
+	gradientMiddleEnabled?: boolean;
+	gradientAngle?: number;
 	gradientStartColor?: string;
 	gradientEndColor?: string;
 	gradientDirection?: string;
 	backgroundImage?: string;
+	backgroundRepeat?: "repeat" | "no-repeat" | "repeat-x" | "repeat-y" | string;
+	backgroundSize?: number | string;
 	backgroundColor: string;
 	textColor: string;
 	fontFamily?: string;
@@ -109,6 +116,7 @@ export interface BarConfig {
 	mobileFontSizePx?: number;
 	textAlign?: "left" | "center" | "right";
 	buttonPositionRelative?: boolean;
+	buttonPosition?: "left" | "center" | "right";
 	buttonFontSizePx?: number;
 	buttonPaddingTopBottom?: number;
 	buttonPaddingLeftRight?: number;
@@ -187,11 +195,18 @@ const DEFAULT_CONFIG: BarConfig = {
 	discountText: "Click to copy your coupon",
 	closeButtonColor: "#000000",
 	backgroundType: "color",
-	backgroundGradient: "linear-gradient(90deg, #8ce99a 0%, #38bdf8 100%)",
-	gradientStartColor: "#8ce99a",
-	gradientEndColor: "#38bdf8",
-	gradientDirection: "90deg",
+	backgroundGradient: "linear-gradient(45deg, #fbc6a4 0%, #d94680 50%, #3b1c66 100%)",
+	gradientColorA: "#fbc6a4",
+	gradientColorB: "#d94680",
+	gradientColorC: "#3b1c66",
+	gradientMiddleEnabled: true,
+	gradientAngle: 45,
+	gradientStartColor: "#fbc6a4",
+	gradientEndColor: "#3b1c66",
+	gradientDirection: "45deg",
 	backgroundImage: "",
+	backgroundRepeat: "repeat",
+	backgroundSize: 50,
 	backgroundColor: "#8ce99a",
 	textColor: "#000000",
 	fontFamily: "Arial",
@@ -199,6 +214,7 @@ const DEFAULT_CONFIG: BarConfig = {
 	mobileFontSizePx: 12,
 	textAlign: "center",
 	buttonPositionRelative: false,
+	buttonPosition: "center",
 	buttonFontSizePx: 16,
 	buttonPaddingTopBottom: 5,
 	buttonPaddingLeftRight: 12,
@@ -386,6 +402,372 @@ function ColorCirclePicker({
 	);
 }
 
+/**
+ * Gradient Presets matching the 19 curated swatches from the reference design
+ */
+export interface GradientPreset {
+	id: string;
+	colorA: string;
+	colorB: string;
+	colorC: string;
+	middleEnabled: boolean;
+	angle: number;
+	css: string;
+}
+
+export const GRADIENT_PRESETS: GradientPreset[] = [
+	// Row 1 (7 presets)
+	{
+		id: "p1",
+		colorA: "#a855f7",
+		colorB: "#ec4899",
+		colorC: "#38bdf8",
+		middleEnabled: true,
+		angle: 135,
+		css: "linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #38bdf8 100%)",
+	},
+	{
+		id: "p2",
+		colorA: "#fb923c",
+		colorB: "#fdba74",
+		colorC: "#f97316",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #fb923c 0%, #fdba74 100%)",
+	},
+	{
+		id: "p3",
+		colorA: "#00b4db",
+		colorB: "#0099cc",
+		colorC: "#0083b0",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #00b4db 0%, #0083b0 100%)",
+	},
+	{
+		id: "p4",
+		colorA: "#9f1239",
+		colorB: "#881337",
+		colorC: "#4c0519",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #881337 0%, #4c0519 100%)",
+	},
+	{
+		id: "p5",
+		colorA: "#4ade80",
+		colorB: "#22c55e",
+		colorC: "#15803d",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+	},
+	{
+		id: "p6",
+		colorA: "#2563eb",
+		colorB: "#1e3a8a",
+		colorC: "#0f172a",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)",
+	},
+	{
+		id: "p7",
+		colorA: "#f472b6",
+		colorB: "#f0abfc",
+		colorC: "#e879f9",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #f472b6 0%, #e879f9 100%)",
+	},
+	// Row 2 (7 presets)
+	{
+		id: "p8",
+		colorA: "#f87171",
+		colorB: "#ef4444",
+		colorC: "#b91c1c",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)",
+	},
+	{
+		id: "p9",
+		colorA: "#2dd4bf",
+		colorB: "#14b8a6",
+		colorC: "#0f766e",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #14b8a6 0%, #0f766e 100%)",
+	},
+	{
+		id: "p10",
+		colorA: "#4b5563",
+		colorB: "#374151",
+		colorC: "#111827",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #374151 0%, #111827 100%)",
+	},
+	{
+		id: "p11",
+		colorA: "#fca5a5",
+		colorB: "#fda4af",
+		colorC: "#fecdd3",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #fca5a5 0%, #fecdd3 100%)",
+	},
+	{
+		id: "p12",
+		colorA: "#14b8a6",
+		colorB: "#0d9488",
+		colorC: "#065f46",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #0d9488 0%, #065f46 100%)",
+	},
+	{
+		id: "p13",
+		colorA: "#fb7185",
+		colorB: "#f43f5e",
+		colorC: "#e11d48",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #fb7185 0%, #e11d48 100%)",
+	},
+	{
+		id: "p14",
+		colorA: "#e0f2fe",
+		colorB: "#bae6fd",
+		colorC: "#7dd3fc",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%)",
+	},
+	// Row 3 (5 presets)
+	{
+		id: "p15",
+		colorA: "#fde047",
+		colorB: "#facc15",
+		colorC: "#d97706",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #facc15 0%, #d97706 100%)",
+	},
+	{
+		id: "p16",
+		colorA: "#fed7aa",
+		colorB: "#fde047",
+		colorC: "#fbcfe8",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #fed7aa 0%, #fbcfe8 100%)",
+	},
+	{
+		id: "p17",
+		colorA: "#60a5fa",
+		colorB: "#3b82f6",
+		colorC: "#1d4ed8",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)",
+	},
+	{
+		id: "p18",
+		colorA: "#fb923c",
+		colorB: "#f97316",
+		colorC: "#f43f5e",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #fb923c 0%, #f43f5e 100%)",
+	},
+	{
+		id: "p19",
+		colorA: "#fb7185",
+		colorB: "#f43f5e",
+		colorC: "#be185d",
+		middleEnabled: false,
+		angle: 135,
+		css: "linear-gradient(135deg, #f43f5e 0%, #be185d 100%)",
+	},
+];
+
+export function buildGradientCss(
+	colorA?: string,
+	colorB?: string,
+	colorC?: string,
+	middleEnabled: boolean = true,
+	angle: number = 45
+): string {
+	const safeAngle = Number.isFinite(angle) ? angle : 45;
+	const a = colorA || "#fbc6a4";
+	const b = colorB || "#d94680";
+	const c = colorC || "#3b1c66";
+	if (middleEnabled) {
+		return `linear-gradient(${safeAngle}deg, ${a} 0%, ${b} 50%, ${c} 100%)`;
+	}
+	return `linear-gradient(${safeAngle}deg, ${a} 0%, ${c} 100%)`;
+}
+
+/**
+ * 9 Curated Background Pattern Presets matching reference design
+ */
+export interface ImagePreset {
+	id: string;
+	name: string;
+	url: string;
+}
+
+export const IMAGE_PRESETS: ImagePreset[] = [
+	{
+		id: "img1",
+		name: "Green Diamonds",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'>
+				<rect width='60' height='60' fill='#556b2f'/>
+				<polygon points='30,0 60,30 30,60 0,30' fill='#8fbc8f'/>
+				<polygon points='30,10 50,30 30,50 10,30' fill='#2e8b57'/>
+				<polygon points='30,18 42,30 30,42 18,30' fill='#9acd32'/>
+				<polygon points='30,24 36,30 30,36 24,30' fill='#556b2f'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img2",
+		name: "Lime Chevron",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'>
+				<rect width='60' height='60' fill='#d9f99d'/>
+				<polygon points='0,0 30,30 60,0 60,30 30,60 0,30' fill='#84cc16'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img3",
+		name: "Sunburst Rays",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'>
+				<defs>
+					<radialGradient id='g3' cx='50%' cy='50%' r='50%'>
+						<stop offset='0%' stop-color='#ffffff'/>
+						<stop offset='100%' stop-color='#00d2ff'/>
+					</radialGradient>
+				</defs>
+				<rect width='80' height='80' fill='url(#g3)'/>
+				<g fill='#00b4db' opacity='0.35'>
+					<polygon points='40,40 32,0 48,0'/>
+					<polygon points='40,40 80,32 80,48'/>
+					<polygon points='40,40 32,80 48,80'/>
+					<polygon points='40,40 0,32 0,48'/>
+					<polygon points='40,40 68,12 80,24'/>
+					<polygon points='40,40 68,68 56,80'/>
+					<polygon points='40,40 12,68 0,56'/>
+					<polygon points='40,40 12,12 24,0'/>
+				</g>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img4",
+		name: "Polka Dots",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'>
+				<rect width='80' height='80' fill='#ffffff'/>
+				<circle cx='12' cy='18' r='4' fill='#000000'/>
+				<circle cx='35' cy='10' r='3.5' fill='#000000'/>
+				<circle cx='60' cy='22' r='4.5' fill='#000000'/>
+				<circle cx='25' cy='35' r='5' fill='#000000'/>
+				<circle cx='48' cy='42' r='3' fill='#000000'/>
+				<circle cx='70' cy='50' r='4' fill='#000000'/>
+				<circle cx='15' cy='62' r='4' fill='#000000'/>
+				<circle cx='40' cy='68' r='5' fill='#000000'/>
+				<circle cx='62' cy='75' r='3.5' fill='#000000'/>
+				<circle cx='75' cy='14' r='3' fill='#000000'/>
+				<circle cx='4' cy='40' r='3.5' fill='#000000'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img5",
+		name: "Night Circle",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'>
+				<rect width='60' height='60' fill='#240046'/>
+				<circle cx='30' cy='30' r='9' fill='#2563eb'/>
+				<circle cx='0' cy='0' r='8' fill='#9f1239'/>
+				<circle cx='60' cy='0' r='8' fill='#9f1239'/>
+				<circle cx='0' cy='60' r='8' fill='#9f1239'/>
+				<circle cx='60' cy='60' r='8' fill='#9f1239'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img6",
+		name: "Orange Origami",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'>
+				<rect width='60' height='60' fill='#ea580c'/>
+				<polygon points='0,0 60,0 30,30' fill='#c2410c'/>
+				<polygon points='60,0 60,60 30,30' fill='#9a3412'/>
+				<polygon points='60,60 0,60 30,30' fill='#f97316'/>
+				<polygon points='0,60 0,0 30,30' fill='#fb923c'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img7",
+		name: "Cyan Ribbon",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'>
+				<rect width='60' height='60' fill='#f0fdfa'/>
+				<polygon points='0,0 30,60 60,60 60,0' fill='#2dd4bf' opacity='0.7'/>
+				<polygon points='0,0 30,30 60,0' fill='#0f766e' opacity='0.35'/>
+				<polygon points='30,30 60,60 0,60' fill='#ffffff' opacity='0.9'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img8",
+		name: "Fish Scales",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='60' height='30' viewBox='0 0 60 30'>
+				<rect width='60' height='30' fill='#0f172a'/>
+				<circle cx='10' cy='0' r='9' fill='#99f6e4'/>
+				<circle cx='30' cy='0' r='9' fill='#ffffff'/>
+				<circle cx='50' cy='0' r='9' fill='#38bdf8'/>
+				<circle cx='0' cy='15' r='9' fill='#2563eb'/>
+				<circle cx='20' cy='15' r='9' fill='#1e293b'/>
+				<circle cx='40' cy='15' r='9' fill='#0f172a'/>
+				<circle cx='60' cy='15' r='9' fill='#0284c7'/>
+				<circle cx='10' cy='30' r='9' fill='#14b8a6'/>
+				<circle cx='30' cy='30' r='9' fill='#e0f2fe'/>
+				<circle cx='50' cy='30' r='9' fill='#1d4ed8'/>
+			</svg>`
+		)}`,
+	},
+	{
+		id: "img9",
+		name: "Burgundy Confetti",
+		url: `data:image/svg+xml,${encodeURIComponent(
+			`<svg xmlns='http://www.w3.org/2000/svg' width='100' height='60' viewBox='0 0 100 60'>
+				<rect width='100' height='60' fill='#992d34'/>
+				<path d='M30,45 Q33,40 36,45 T42,45' fill='none' stroke='#ffccd5' stroke-width='1.5'/>
+				<path d='M80,42 Q83,38 86,43 T92,42' fill='none' stroke='#ffccd5' stroke-width='1.5'/>
+				<circle cx='15' cy='12' r='2' fill='#ffd166'/>
+				<circle cx='65' cy='18' r='1.8' fill='#06d6a0'/>
+				<circle cx='42' cy='14' r='2.2' fill='#38bdf8'/>
+				<polygon points='75,8 78,13 72,13' fill='#ffe3e3'/>
+				<polygon points='38,52 42,56 36,58' fill='#ffd166'/>
+				<path d='M88,26 L94,32 M94,26 L88,32' stroke='#ffffff' stroke-width='1.2'/>
+				<path d='M25,28 A4,4 0 0,1 29,34' fill='none' stroke='#ffe3e3' stroke-width='1.5'/>
+				<circle cx='20' cy='48' r='1.5' fill='#38bdf8'/>
+				<circle cx='55' cy='46' r='1.5' fill='#ffffff'/>
+				<circle cx='82' cy='52' r='1.8' fill='#ffd166'/>
+			</svg>`
+		)}`,
+	},
+];
+
 export function CustomizeBarPage() {
 	// Navigation & step state
 	const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
@@ -566,6 +948,52 @@ export function CustomizeBarPage() {
 		}
 	};
 
+	const updateMultiple = (updates: Partial<BarConfig>) => {
+		setConfig((prev) => ({ ...prev, ...updates }));
+	};
+
+	const handleGradientChange = (changes: {
+		colorA?: string;
+		colorB?: string;
+		colorC?: string;
+		middleEnabled?: boolean;
+		angle?: number;
+	}) => {
+		const nextColorA = changes.colorA !== undefined ? changes.colorA : (config.gradientColorA || "#fbc6a4");
+		const nextColorB = changes.colorB !== undefined ? changes.colorB : (config.gradientColorB || "#d94680");
+		const nextColorC = changes.colorC !== undefined ? changes.colorC : (config.gradientColorC || "#3b1c66");
+		const nextMiddle = changes.middleEnabled !== undefined ? changes.middleEnabled : (config.gradientMiddleEnabled ?? true);
+		const nextAngle = changes.angle !== undefined ? changes.angle : (config.gradientAngle ?? 45);
+
+		const nextGradient = buildGradientCss(nextColorA, nextColorB, nextColorC, nextMiddle, nextAngle);
+
+		updateMultiple({
+			gradientColorA: nextColorA,
+			gradientColorB: nextColorB,
+			gradientColorC: nextColorC,
+			gradientMiddleEnabled: nextMiddle,
+			gradientAngle: nextAngle,
+			backgroundGradient: nextGradient,
+			gradientStartColor: nextColorA,
+			gradientEndColor: nextColorC,
+			gradientDirection: `${nextAngle}deg`,
+		});
+	};
+
+	const handleSelectPreset = (preset: GradientPreset) => {
+		updateMultiple({
+			gradientColorA: preset.colorA,
+			gradientColorB: preset.colorB,
+			gradientColorC: preset.colorC,
+			gradientMiddleEnabled: preset.middleEnabled,
+			gradientAngle: preset.angle,
+			backgroundGradient: preset.css,
+			gradientStartColor: preset.colorA,
+			gradientEndColor: preset.colorC,
+			gradientDirection: `${preset.angle}deg`,
+		});
+	};
+
 	const isDarkBg = (hexColor: string) => {
 		if (!hexColor || typeof hexColor !== "string" || !hexColor.startsWith("#")) return false;
 		const hex = hexColor.replace("#", "");
@@ -618,7 +1046,10 @@ export function CustomizeBarPage() {
 			display: "inline-flex",
 			alignItems: "center",
 			justifyContent: "center",
-			marginLeft: config.buttonPositionRelative ? "12px" : "0",
+			marginLeft: config.buttonPositionRelative
+				? (config.buttonPosition === "left" ? "0" : config.buttonPosition === "right" ? "16px" : "12px")
+				: "0",
+			marginRight: config.buttonPositionRelative && config.buttonPosition === "left" ? "12px" : "0",
 		};
 
 		return (
@@ -807,6 +1238,26 @@ export function CustomizeBarPage() {
 		} catch {
 			// ignore
 		}
+	};
+
+	// Background image upload and dropzone ref & state
+	const bgFileInputRef = useRef<HTMLInputElement>(null);
+	const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+	const handleImageFileUpload = (file: File) => {
+		if (!file.type.startsWith("image/")) {
+			setToast({ message: "Please select a valid image file (PNG, JPG, SVG, WebP, GIF)", type: "error" });
+			return;
+		}
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			const result = e.target?.result as string;
+			if (result) {
+				update("backgroundImage", result);
+				setToast({ message: `Image "${file.name}" uploaded successfully!`, type: "success" });
+			}
+		};
+		reader.readAsDataURL(file);
 	};
 
 	const applyCouponFormat = (command: string, value: string | undefined = undefined) => {
@@ -1633,6 +2084,186 @@ export function CustomizeBarPage() {
 					line-height: 1;
 				}
 
+				/* Gradient Presets & Controls matching reference */
+				.gradient-presets-grid {
+					display: grid;
+					grid-template-columns: repeat(7, 44px);
+					gap: 12px;
+					margin: 16px 0 22px 0;
+				}
+				@media (max-width: 580px) {
+					.gradient-presets-grid {
+						grid-template-columns: repeat(4, 44px);
+					}
+				}
+				.gradient-swatch-card {
+					width: 44px;
+					height: 44px;
+					border-radius: 12px;
+					border: 2px solid transparent;
+					cursor: pointer;
+					padding: 0;
+					transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+					outline: none;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+					position: relative;
+				}
+				.gradient-swatch-card:hover {
+					transform: translateY(-2px) scale(1.06);
+					box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+				}
+				.gradient-swatch-card.active {
+					border-color: #0080ff;
+					box-shadow: 0 0 0 2px rgba(0, 128, 255, 0.4);
+					transform: scale(1.04);
+				}
+				.gradient-angle-slider-wrap {
+					position: relative;
+					width: 100%;
+					max-width: 480px;
+					padding: 8px 0;
+				}
+				.gradient-angle-track-bg {
+					position: absolute;
+					top: 14px;
+					left: 0;
+					right: 0;
+					height: 5px;
+					border-radius: 3px;
+					background: #e2e8f0;
+					pointer-events: none;
+					overflow: visible;
+				}
+				.gradient-angle-track-fill {
+					height: 100%;
+					border-radius: 3px;
+					background: #0080ff;
+				}
+				.gradient-angle-mid-dot {
+					position: absolute;
+					left: 50%;
+					top: 50%;
+					transform: translate(-50%, -50%);
+					width: 5px;
+					height: 5px;
+					border-radius: 50%;
+					background: #cbd5e1;
+					pointer-events: none;
+				}
+				.gradient-angle-range-input {
+					-webkit-appearance: none;
+					appearance: none;
+					width: 100%;
+					height: 18px;
+					background: transparent;
+					position: relative;
+					z-index: 2;
+					margin: 0;
+					cursor: pointer;
+					outline: none;
+					display: block;
+				}
+				.gradient-angle-range-input::-webkit-slider-thumb {
+					-webkit-appearance: none;
+					appearance: none;
+					width: 18px;
+					height: 18px;
+					border-radius: 50%;
+					background: #ffffff;
+					border: 3px solid #0080ff;
+					box-shadow: 0 1px 4px rgba(0, 128, 255, 0.3);
+					cursor: pointer;
+					transition: transform 0.1s ease;
+				}
+				.gradient-angle-range-input::-webkit-slider-thumb:hover {
+					transform: scale(1.15);
+				}
+				.gradient-angle-range-input::-moz-range-thumb {
+					width: 18px;
+					height: 18px;
+					border-radius: 50%;
+					background: #ffffff;
+					border: 3px solid #0080ff;
+					box-shadow: 0 1px 4px rgba(0, 128, 255, 0.3);
+					cursor: pointer;
+				}
+				.gradient-angle-scale-row {
+					display: flex;
+					justify-content: space-between;
+					margin-top: 6px;
+					font-size: 11px;
+					color: #94a3b8;
+					font-weight: 500;
+				}
+
+				/* Image Presets & Dropzone styles matching reference */
+				.image-presets-grid {
+					display: grid;
+					grid-template-columns: repeat(6, 56px);
+					gap: 12px;
+					margin: 16px 0 20px 0;
+				}
+				@media (max-width: 580px) {
+					.image-presets-grid {
+						grid-template-columns: repeat(3, 56px);
+					}
+				}
+				.image-swatch-card {
+					width: 56px;
+					height: 56px;
+					border-radius: 6px;
+					border: 2px solid transparent;
+					cursor: pointer;
+					padding: 0;
+					background-size: cover;
+					background-position: center;
+					transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+					outline: none;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+					overflow: hidden;
+				}
+				.image-swatch-card:hover {
+					transform: translateY(-2px) scale(1.06);
+					box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+				}
+				.image-swatch-card.active {
+					border-color: #0080ff;
+					box-shadow: 0 0 0 2px rgba(0, 128, 255, 0.4);
+					transform: scale(1.04);
+				}
+				.image-dropzone-card {
+					margin-top: 22px;
+					background: #f7f9ff;
+					border: 1px dashed #c7d2fe;
+					border-radius: 12px;
+					padding: 32px 20px;
+					text-align: center;
+					cursor: pointer;
+					transition: all 0.2s ease;
+					max-width: 520px;
+				}
+				.image-dropzone-card:hover,
+				.image-dropzone-card.dragging {
+					background: #eef2ff;
+					border-color: #3b82f6;
+				}
+				.image-upload-btn {
+					background: #0080ff;
+					color: #ffffff;
+					border: none;
+					padding: 8px 24px;
+					border-radius: 6px;
+					font-size: 13.5px;
+					font-weight: 600;
+					cursor: pointer;
+					transition: background 0.15s ease, transform 0.1s ease;
+					box-shadow: 0 1px 3px rgba(0, 128, 255, 0.25);
+				}
+				.image-upload-btn:hover {
+					background: #0069d9;
+					transform: translateY(-1px);
+				}
+
 				/* Inputs & Selects */
 				.text-field-input {
 					width: 100%;
@@ -2080,36 +2711,40 @@ export function CustomizeBarPage() {
 				}
 
 				/* Pixel Input Box with px Addon */
-				.input-group-px {
+				.input-group-px,
+				.pixel-input-group {
 					display: inline-flex;
 					align-items: center;
 					border: 1px solid var(--border-card);
 					border-radius: 6px;
 					background: #ffffff;
-					height: 38px;
+					height: 40px;
 					overflow: hidden;
 					box-sizing: border-box;
 					transition: border-color 0.15s ease, box-shadow 0.15s ease;
 				}
-				.input-group-px:focus-within {
+				.input-group-px:focus-within,
+				.pixel-input-group:focus-within {
 					border-color: var(--primary-blue);
 					box-shadow: 0 0 0 2px var(--primary-blue-border);
 				}
-				.input-px-field {
+				.input-px-field,
+				.pixel-input-field {
 					flex: 1;
 					min-width: 0;
 					width: 100%;
 					height: 100%;
 					border: none;
 					background: transparent;
-					padding: 0 10px;
+					padding: 0 12px;
 					font-size: 13px;
 					font-weight: 600;
 					color: var(--text-main);
 					outline: none;
 					box-sizing: border-box;
 				}
-				.input-addon-px {
+				.input-addon-px,
+				.pixel-input-addon {
 					display: flex;
 					align-items: center;
 					justify-content: center;
@@ -2373,10 +3008,16 @@ export function CustomizeBarPage() {
 									style={{
 										background:
 											config.backgroundType === "gradient"
-												? (config.backgroundGradient || `linear-gradient(${config.gradientDirection || "90deg"}, ${config.gradientStartColor || config.backgroundColor || "#8ce99a"} 0%, ${config.gradientEndColor || "#38bdf8"} 100%)`)
-												: config.backgroundType === "image" && config.backgroundImage
-												? `url("${config.backgroundImage}") center/cover no-repeat`
+												? (config.backgroundGradient || (config.gradientColorA ? `linear-gradient(${config.gradientAngle ?? 45}deg, ${config.gradientColorA} 0%, ${config.gradientMiddleEnabled ? `${config.gradientColorB || "#d94680"} 50%, ` : ""}${config.gradientColorC || "#3b1c66"} 100%)` : `linear-gradient(${config.gradientDirection || "90deg"}, ${config.gradientStartColor || config.backgroundColor || "#8ce99a"} 0%, ${config.gradientEndColor || "#38bdf8"} 100%)`))
+												: config.backgroundType === "image" && (config.backgroundImage || IMAGE_PRESETS[8].url)
+												? `url("${config.backgroundImage || IMAGE_PRESETS[8].url}") ${config.backgroundRepeat || "repeat"}`
 												: (config.backgroundColor || "#8ce99a"),
+										backgroundSize: config.backgroundType === "image"
+											? (config.backgroundSize ? `${config.backgroundSize}px` : "50px")
+											: undefined,
+										backgroundRepeat: config.backgroundType === "image"
+											? (config.backgroundRepeat || "repeat")
+											: undefined,
 										color: config.textColor || "#000000",
 										fontFamily: config.fontFamily ? `${config.fontFamily}, sans-serif` : "Arial, sans-serif",
 										fontSize: previewDevice === "mobile" ? `${config.mobileFontSizePx || 12}px` : `${config.fontSizePx || 16}px`,
@@ -2590,6 +3231,7 @@ export function CustomizeBarPage() {
 									</div>
 								) : (
 									<>
+										{Boolean(config.buttonPositionRelative && config.buttonPosition === "left") && renderPreviewCtaButton()}
 										{config.iconPosition !== "right" && renderPreviewIcon()}
 										<span
 											className="bar-static-content"
@@ -2653,7 +3295,7 @@ export function CustomizeBarPage() {
 											</div>
 										)}
 										{/* If Set Position Relative To Text is enabled, render CTA button inline */}
-										{Boolean(config.buttonPositionRelative) && renderPreviewCtaButton()}
+										{Boolean(config.buttonPositionRelative && config.buttonPosition !== "left") && renderPreviewCtaButton()}
 									</>
 								)}
 							</div>
@@ -4303,7 +4945,12 @@ export function CustomizeBarPage() {
 										<button
 											type="button"
 											className={`option-pill-btn ${config.backgroundType === "image" ? "selected" : ""}`}
-											onClick={() => update("backgroundType", "image")}
+											onClick={() => {
+												update("backgroundType", "image");
+												if (!config.backgroundImage) {
+													update("backgroundImage", IMAGE_PRESETS[8].url);
+												}
+											}}
 										>
 											<span>Image</span>
 											{config.backgroundType === "image" && (
@@ -4326,64 +4973,307 @@ export function CustomizeBarPage() {
 
 									{/* When Gradient is selected */}
 									{config.backgroundType === "gradient" && (
-										<div style={{ marginTop: "14px", display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end" }}>
-											<div>
-												<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Start Color</div>
-												<ColorCirclePicker
-													id="gradient-start-color"
-													color={config.gradientStartColor || config.backgroundColor || "#8ce99a"}
-													onChange={(c) => {
-														update("gradientStartColor", c);
-														const end = config.gradientEndColor || "#38bdf8";
-														update("backgroundGradient", `linear-gradient(${config.gradientDirection || "90deg"}, ${c} 0%, ${end} 100%)`);
-													}}
-												/>
+										<div style={{ marginTop: "16px" }}>
+											{/* 19 Presets Grid */}
+											<div className="gradient-presets-grid" role="group" aria-label="Gradient Presets">
+												{GRADIENT_PRESETS.map((preset) => {
+													const isSelected =
+														config.backgroundGradient === preset.css ||
+														(config.gradientColorA === preset.colorA &&
+															config.gradientColorC === preset.colorC &&
+															(config.gradientMiddleEnabled ? config.gradientColorB === preset.colorB : true));
+													return (
+														<button
+															key={preset.id}
+															type="button"
+															className={`gradient-swatch-card ${isSelected ? "active" : ""}`}
+															style={{ background: preset.css }}
+															onClick={() => handleSelectPreset(preset)}
+															title={`Preset gradient ${preset.id}`}
+															aria-label={`Select gradient preset ${preset.id}`}
+														/>
+													);
+												})}
 											</div>
-											<div>
-												<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>End Color</div>
-												<ColorCirclePicker
-													id="gradient-end-color"
-													color={config.gradientEndColor || "#38bdf8"}
-													onChange={(c) => {
-														update("gradientEndColor", c);
-														const start = config.gradientStartColor || config.backgroundColor || "#8ce99a";
-														update("backgroundGradient", `linear-gradient(${config.gradientDirection || "90deg"}, ${start} 0%, ${c} 100%)`);
-													}}
-												/>
+
+											{/* ColorA, ColorB, ColorC Pickers & Middle ColorB Toggle */}
+											<div style={{ display: "flex", alignItems: "center", gap: "28px", flexWrap: "wrap", margin: "18px 0" }}>
+												<div style={{ display: "flex", gap: "22px", alignItems: "flex-end" }}>
+													<div>
+														<div style={{ fontSize: "12px", color: "var(--text-muted, #64748b)", marginBottom: "8px", fontWeight: 500 }}>
+															ColorA
+														</div>
+														<ColorCirclePicker
+															id="gradient-color-a"
+															size={34}
+															color={config.gradientColorA || "#fbc6a4"}
+															onChange={(c) => handleGradientChange({ colorA: c })}
+														/>
+													</div>
+													<div>
+														<div
+															style={{
+																fontSize: "12px",
+																color: "var(--text-muted, #64748b)",
+																marginBottom: "8px",
+																fontWeight: 500,
+																opacity: (config.gradientMiddleEnabled ?? true) ? 1 : 0.4,
+															}}
+														>
+															ColorB
+														</div>
+														<div
+															style={{
+																opacity: (config.gradientMiddleEnabled ?? true) ? 1 : 0.35,
+																pointerEvents: (config.gradientMiddleEnabled ?? true) ? "auto" : "none",
+																transition: "opacity 0.2s ease",
+															}}
+														>
+															<ColorCirclePicker
+																id="gradient-color-b"
+																size={34}
+																color={config.gradientColorB || "#d94680"}
+																onChange={(c) => handleGradientChange({ colorB: c })}
+															/>
+														</div>
+													</div>
+													<div>
+														<div style={{ fontSize: "12px", color: "var(--text-muted, #64748b)", marginBottom: "8px", fontWeight: 500 }}>
+															ColorC
+														</div>
+														<ColorCirclePicker
+															id="gradient-color-c"
+															size={34}
+															color={config.gradientColorC || "#3b1c66"}
+															onChange={(c) => handleGradientChange({ colorC: c })}
+														/>
+													</div>
+												</div>
+
+												{/* Middle ColorB Toggle Switch */}
+												<div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "14px" }}>
+													<button
+														type="button"
+														role="switch"
+														aria-checked={config.gradientMiddleEnabled ?? true}
+														onClick={() =>
+															handleGradientChange({
+																middleEnabled: !(config.gradientMiddleEnabled ?? true),
+															})
+														}
+														style={{
+															width: "48px",
+															height: "26px",
+															borderRadius: "13px",
+															border: "none",
+															background: (config.gradientMiddleEnabled ?? true) ? "#0080ff" : "#cbd5e1",
+															padding: "2px",
+															cursor: "pointer",
+															display: "inline-flex",
+															alignItems: "center",
+															transition: "background-color 0.2s ease",
+															outline: "none",
+														}}
+													>
+														<span
+															style={{
+																display: "block",
+																width: "22px",
+																height: "22px",
+																borderRadius: "50%",
+																background: "#ffffff",
+																boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+																transform: (config.gradientMiddleEnabled ?? true)
+																	? "translateX(22px)"
+																	: "translateX(0px)",
+																transition: "transform 0.2s ease",
+															}}
+														/>
+													</button>
+													<span
+														onClick={() =>
+															handleGradientChange({
+																middleEnabled: !(config.gradientMiddleEnabled ?? true),
+															})
+														}
+														style={{
+															fontSize: "13.5px",
+															fontWeight: 500,
+															color: "var(--text-main, #1e293b)",
+															cursor: "pointer",
+															userSelect: "none",
+														}}
+													>
+														Middle ColorB
+													</span>
+												</div>
 											</div>
-											<div>
-												<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Direction</div>
-												<select
-													className="text-field-select"
-													style={{ width: "160px" }}
-													value={config.gradientDirection || "90deg"}
-													onChange={(e) => {
-														update("gradientDirection", e.target.value);
-														const start = config.gradientStartColor || config.backgroundColor || "#8ce99a";
-														const end = config.gradientEndColor || "#38bdf8";
-														update("backgroundGradient", `linear-gradient(${e.target.value}, ${start} 0%, ${end} 100%)`);
+
+											{/* Gradient Angle Slider */}
+											<div style={{ marginTop: "18px" }}>
+												<div
+													style={{
+														fontSize: "13px",
+														fontWeight: 500,
+														color: "var(--text-muted, #64748b)",
+														marginBottom: "6px",
 													}}
 												>
-													<option value="90deg">Left → Right (90°)</option>
-													<option value="180deg">Top → Bottom (180°)</option>
-													<option value="135deg">Diagonal (135°)</option>
-													<option value="45deg">Diagonal (45°)</option>
-												</select>
+													Gradient Angle
+												</div>
+												<div className="gradient-angle-slider-wrap">
+													<div className="gradient-angle-track-bg">
+														<div
+															className="gradient-angle-track-fill"
+															style={{ width: `${((config.gradientAngle ?? 45) / 360) * 100}%` }}
+														/>
+														<div className="gradient-angle-mid-dot" title="180°" />
+													</div>
+													<input
+														type="range"
+														min="0"
+														max="360"
+														step="1"
+														className="gradient-angle-range-input"
+														value={config.gradientAngle ?? 45}
+														onChange={(e) =>
+															handleGradientChange({ angle: Number(e.target.value) })
+														}
+														aria-label="Gradient Angle"
+													/>
+													<div className="gradient-angle-scale-row">
+														<span>°0</span>
+														<span>°180</span>
+														<span>°360</span>
+													</div>
+												</div>
 											</div>
 										</div>
 									)}
 
 									{/* When Image is selected */}
 									{config.backgroundType === "image" && (
-										<div style={{ marginTop: "14px" }}>
-											<div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Background Image URL</div>
-											<input
-												type="text"
-												className="text-field-input"
-												placeholder="https://example.com/banner-bg.jpg"
-												value={config.backgroundImage || ""}
-												onChange={(e) => update("backgroundImage", e.target.value)}
-											/>
+										<div style={{ marginTop: "16px" }}>
+											{/* 9 Presets Grid: Row 1 has 6, Row 2 has 3 */}
+											<div className="image-presets-grid" role="group" aria-label="Background Image Presets">
+												{IMAGE_PRESETS.map((preset) => {
+													const activeBg = config.backgroundImage || IMAGE_PRESETS[8].url;
+													const isSelected = activeBg === preset.url;
+													return (
+														<button
+															key={preset.id}
+															type="button"
+															className={`image-swatch-card ${isSelected ? "active" : ""}`}
+															style={{ backgroundImage: `url("${preset.url}")` }}
+															onClick={() => update("backgroundImage", preset.url)}
+															title={preset.name}
+															aria-label={preset.name}
+														/>
+													);
+												})}
+											</div>
+
+											{/* Two Columns: Preview Box on Left, Repeat & Size on Right */}
+											<div style={{ display: "flex", gap: "20px", alignItems: "flex-start", flexWrap: "wrap", marginTop: "18px" }}>
+												<div
+													style={{
+														width: "220px",
+														height: "110px",
+														borderRadius: "6px",
+														border: "1px solid #cbd5e1",
+														backgroundImage: `url("${config.backgroundImage || IMAGE_PRESETS[8].url}")`,
+														backgroundRepeat: config.backgroundRepeat || "repeat",
+														backgroundSize: config.backgroundSize ? `${config.backgroundSize}px` : "50px",
+														backgroundPosition: "center",
+														boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+														flexShrink: 0,
+													}}
+													title="Selected background image preview"
+												/>
+
+												<div style={{ display: "flex", flexDirection: "column", gap: "14px", minWidth: "180px" }}>
+													<div>
+														<div style={{ fontSize: "12px", color: "var(--text-muted, #64748b)", marginBottom: "6px", fontWeight: 500 }}>
+															Background Repeat
+														</div>
+														<select
+															className="text-field-select"
+															style={{ width: "190px" }}
+															value={config.backgroundRepeat || "repeat"}
+															onChange={(e) => update("backgroundRepeat", e.target.value)}
+														>
+															<option value="repeat">Repeat</option>
+															<option value="no-repeat">No Repeat</option>
+															<option value="repeat-x">Repeat-X</option>
+															<option value="repeat-y">Repeat-Y</option>
+														</select>
+													</div>
+
+													<div>
+														<div style={{ fontSize: "12px", color: "var(--text-muted, #64748b)", marginBottom: "6px", fontWeight: 500 }}>
+															Background Size
+														</div>
+														<div className="input-group-px" style={{ width: "190px" }}>
+															<input
+																type="number"
+																min="10"
+																max="1000"
+																step="1"
+																className="input-px-field"
+																value={config.backgroundSize ?? 50}
+																onChange={(e) => update("backgroundSize", Number(e.target.value) || 50)}
+															/>
+															<span className="input-addon-px">px</span>
+														</div>
+													</div>
+												</div>
+											</div>
+
+											{/* Drag and Drop Card */}
+											<div
+												className={`image-dropzone-card ${isDraggingFile ? "dragging" : ""}`}
+												onDragOver={(e) => {
+													e.preventDefault();
+													setIsDraggingFile(true);
+												}}
+												onDragLeave={() => setIsDraggingFile(false)}
+												onDrop={(e) => {
+													e.preventDefault();
+													setIsDraggingFile(false);
+													if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+														handleImageFileUpload(e.dataTransfer.files[0]);
+													}
+												}}
+												onClick={() => bgFileInputRef.current?.click()}
+											>
+												<input
+													ref={bgFileInputRef}
+													type="file"
+													accept="image/*"
+													style={{ display: "none" }}
+													onChange={(e) => {
+														if (e.target.files && e.target.files[0]) {
+															handleImageFileUpload(e.target.files[0]);
+														}
+													}}
+												/>
+												<div style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-main, #334155)", marginBottom: "4px" }}>
+													Drag and Drop the files
+												</div>
+												<div style={{ fontSize: "12px", color: "var(--text-muted, #94a3b8)", marginBottom: "14px" }}>
+													or
+												</div>
+												<button
+													type="button"
+													className="image-upload-btn"
+													onClick={(e) => {
+														e.stopPropagation();
+														bgFileInputRef.current?.click();
+													}}
+												>
+													Upload File
+												</button>
+											</div>
 										</div>
 									)}
 								</div>
@@ -4535,13 +5425,42 @@ export function CustomizeBarPage() {
 								</div>
 							</div>
 
+							{/* Position */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="Choose the alignment of the button relative to the announcement text." />
+									<span>Position</span>
+								</div>
+								<div className="row-control-col">
+									<div className="option-button-group" role="radiogroup" aria-label="Button Position">
+										{(["left", "center", "right"] as const).map((pos) => {
+											const isSelected = (config.buttonPosition || "center") === pos;
+											return (
+												<button
+													key={pos}
+													type="button"
+													className={`option-pill-btn ${isSelected ? "selected" : ""}`}
+													onClick={() => update("buttonPosition", pos)}
+													style={{ minWidth: "120px", height: "38px" }}
+												>
+													<span style={{ textTransform: "capitalize" }}>{pos}</span>
+													{isSelected && (
+														<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+													)}
+												</button>
+											);
+										})}
+									</div>
+								</div>
+							</div>
+
 							{/* Button Text Style */}
 							<div className="form-row">
 								<label className="row-label-col">
 									Button Text Style
 								</label>
 								<div className="row-control-col">
-									<div style={{ width: "140px" }}>
+									<div style={{ width: "150px" }}>
 										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
 											FontSize
 										</label>
@@ -4566,7 +5485,7 @@ export function CustomizeBarPage() {
 									Padding
 								</label>
 								<div className="row-control-col" style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-									<div style={{ width: "140px" }}>
+									<div style={{ width: "150px" }}>
 										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
 											Top/Bottom
 										</label>
@@ -4582,7 +5501,7 @@ export function CustomizeBarPage() {
 											<span className="input-addon-px">px</span>
 										</div>
 									</div>
-									<div style={{ width: "140px" }}>
+									<div style={{ width: "150px" }}>
 										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
 											Left/Right
 										</label>
@@ -4607,7 +5526,7 @@ export function CustomizeBarPage() {
 									Border Style
 								</label>
 								<div className="row-control-col" style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end" }}>
-									<div style={{ width: "140px" }}>
+									<div style={{ width: "150px" }}>
 										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
 											Button Radius
 										</label>
@@ -4623,12 +5542,23 @@ export function CustomizeBarPage() {
 											<span className="input-addon-px">px</span>
 										</div>
 									</div>
-									<div style={{ width: "140px" }}>
+									<div style={{ width: "150px" }}>
 										<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
 											Border Style
 										</label>
 										<select
 											className="text-field-select"
+											style={{
+												height: "40px",
+												borderRadius: "6px",
+												border: "1px solid var(--border-card)",
+												background: "#ffffff",
+												padding: "0 12px",
+												width: "100%",
+												fontSize: "13px",
+												fontWeight: 500,
+												color: "var(--text-main)",
+											}}
 											value={config.buttonBorderStyle || "none"}
 											onChange={(e) => update("buttonBorderStyle", e.target.value as any)}
 										>
@@ -4640,16 +5570,34 @@ export function CustomizeBarPage() {
 										</select>
 									</div>
 									{config.buttonBorderStyle && config.buttonBorderStyle !== "none" && (
-										<div>
-											<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
-												Border Color
-											</label>
-											<ColorCirclePicker
-												id="btn-border-color"
-												color={config.buttonBorderColor || "#000000"}
-												onChange={(c) => update("buttonBorderColor", c)}
-											/>
-										</div>
+										<>
+											<div style={{ width: "110px" }}>
+												<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+													Border Width
+												</label>
+												<div className="input-group-px">
+													<input
+														type="number"
+														min={1}
+														max={10}
+														className="input-px-field"
+														value={config.buttonBorderWidth ?? 1}
+														onChange={(e) => update("buttonBorderWidth", parseInt(e.target.value, 10) || 1)}
+													/>
+													<span className="input-addon-px">px</span>
+												</div>
+											</div>
+											<div>
+												<label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>
+													Border Color
+												</label>
+												<ColorCirclePicker
+													id="btn-border-color"
+													color={config.buttonBorderColor || "#000000"}
+													onChange={(c) => update("buttonBorderColor", c)}
+												/>
+											</div>
+										</>
 									)}
 								</div>
 							</div>
@@ -4660,7 +5608,7 @@ export function CustomizeBarPage() {
 									Mobile Button FontSize
 								</label>
 								<div className="row-control-col">
-									<div className="input-group-px" style={{ width: "140px" }}>
+									<div className="input-group-px" style={{ width: "150px" }}>
 										<input
 											type="number"
 											min={8}

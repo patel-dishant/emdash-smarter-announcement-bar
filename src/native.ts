@@ -60,15 +60,23 @@ export interface BarConfig {
 	closeButtonColor?: string;
 	backgroundType?: "color" | "gradient" | "image";
 	backgroundGradient?: string;
+	gradientColorA?: string;
+	gradientColorB?: string;
+	gradientColorC?: string;
+	gradientMiddleEnabled?: boolean;
+	gradientAngle?: number;
 	gradientStartColor?: string;
 	gradientEndColor?: string;
 	gradientDirection?: string;
 	backgroundImage?: string;
+	backgroundRepeat?: "repeat" | "no-repeat" | "repeat-x" | "repeat-y" | string;
+	backgroundSize?: number | string;
 	fontFamily?: string;
 	fontSizePx?: number;
 	mobileFontSizePx?: number;
 	textAlign?: "left" | "center" | "right";
 	buttonPositionRelative?: boolean;
+	buttonPosition?: "left" | "center" | "right";
 	buttonFontSizePx?: number;
 	buttonPaddingTopBottom?: number;
 	buttonPaddingLeftRight?: number;
@@ -125,16 +133,24 @@ const DEFAULT_CONFIG: BarConfig = {
 	discountCode: "SAVE30",
 	closeButtonColor: "#000000",
 	backgroundType: "color",
-	backgroundGradient: "linear-gradient(90deg, #84cc16 0%, #38bdf8 100%)",
-	gradientStartColor: "#84cc16",
-	gradientEndColor: "#38bdf8",
-	gradientDirection: "90deg",
+	backgroundGradient: "linear-gradient(45deg, #fbc6a4 0%, #d94680 50%, #3b1c66 100%)",
+	gradientColorA: "#fbc6a4",
+	gradientColorB: "#d94680",
+	gradientColorC: "#3b1c66",
+	gradientMiddleEnabled: true,
+	gradientAngle: 45,
+	gradientStartColor: "#fbc6a4",
+	gradientEndColor: "#3b1c66",
+	gradientDirection: "45deg",
 	backgroundImage: "",
+	backgroundRepeat: "repeat",
+	backgroundSize: 50,
 	fontFamily: "Arial",
 	fontSizePx: 16,
 	mobileFontSizePx: 12,
 	textAlign: "center",
 	buttonPositionRelative: false,
+	buttonPosition: "center",
 	buttonFontSizePx: 16,
 	buttonPaddingTopBottom: 5,
 	buttonPaddingLeftRight: 12,
@@ -320,15 +336,19 @@ export function renderPublicBar(config: BarConfig): string {
 	const buttonDeviceClass = (!hasButtonDesktop && hasButtonMobile) ? "hide-on-desktop" : (hasButtonDesktop && !hasButtonMobile) ? "hide-on-mobile" : (!hasButtonDesktop && !hasButtonMobile) ? "hide-always" : "";
 
 	const isButtonInline = Boolean(config.buttonPositionRelative);
+	const buttonPos = config.buttonPosition || "center";
+	const btnMargin = isButtonInline
+		? (buttonPos === "left" ? "margin-right: 12px;" : buttonPos === "right" ? "margin-left: auto;" : "margin-left: 12px;")
+		: "";
 	const btnBorder = (config.buttonBorderStyle && config.buttonBorderStyle !== "none")
 		? `${config.buttonBorderWidth || 1}px ${config.buttonBorderStyle} ${config.buttonBorderColor || "#000000"}`
 		: "none";
 	const buttonHtml = (!showDiscountRightaway && isButtonActive)
 		? `<button type="button" class="smarter-cta-btn ${effectClass} ${buttonDeviceClass}" style="background-color: ${
 				config.buttonBackgroundColor || "#000000"
-		  }; color: ${
+		  } !important; color: ${
 				config.buttonTextColor || "#ffffff"
-		  }; border: ${btnBorder}; border-radius: ${config.buttonBorderRadius ?? 1}px; padding: ${config.buttonPaddingTopBottom ?? 5}px ${config.buttonPaddingLeftRight ?? 12}px; font-weight: 600; font-size: ${config.buttonFontSizePx ?? 16}px; cursor: pointer; ${isButtonInline ? "margin-left: 12px;" : ""}" onclick="handleSmarterBarCta_${barIdClean}()">${
+		  } !important; border: ${btnBorder}; border-radius: ${config.buttonBorderRadius ?? 1}px; padding: ${config.buttonPaddingTopBottom ?? 5}px ${config.buttonPaddingLeftRight ?? 12}px; font-weight: 600; font-size: ${config.buttonFontSizePx ?? 16}px; cursor: pointer; ${btnMargin}" onclick="handleSmarterBarCta_${barIdClean}()">${
 				config.buttonText
 		  }</button>`
 		: "";
@@ -410,6 +430,29 @@ export function renderPublicBar(config: BarConfig): string {
 		`
 		)
 		.join("");
+
+	const barBg = config.backgroundType === "gradient"
+		? (config.backgroundGradient || (config.gradientColorA ? `linear-gradient(${config.gradientAngle ?? 45}deg, ${config.gradientColorA} 0%, ${config.gradientMiddleEnabled ? `${config.gradientColorB || "#d94680"} 50%, ` : ""}${config.gradientColorC || "#3b1c66"} 100%)` : `linear-gradient(${config.gradientDirection || "90deg"}, ${config.gradientStartColor || config.backgroundColor || "#84cc16"} 0%, ${config.gradientEndColor || "#38bdf8"} 100%)`))
+		: (config.backgroundType === "image" && config.backgroundImage)
+		? `url('${config.backgroundImage.replace(/'/g, "\\'")}') ${config.backgroundRepeat || "repeat"}`
+		: (config.backgroundColor || "#84cc16");
+
+	const barBgSize = (config.backgroundType === "image" && config.backgroundImage)
+		? (config.backgroundSize ? `${config.backgroundSize}px` : "50px")
+		: "";
+	const barBgRepeat = (config.backgroundType === "image" && config.backgroundImage)
+		? (config.backgroundRepeat || "repeat")
+		: "";
+
+	const barInlineStyles = [
+		`background: ${barBg} !important`,
+		barBgSize ? `background-size: ${barBgSize} !important` : "",
+		barBgRepeat ? `background-repeat: ${barBgRepeat} !important` : "",
+		`color: ${config.textColor || "#000000"} !important`,
+		`font-size: ${config.fontSizePx ? `${config.fontSizePx}px` : fontSize} !important`,
+		`padding: ${pad} !important`,
+		`font-family: ${config.fontFamily ? `${config.fontFamily}, sans-serif` : "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"}`,
+	].filter(Boolean).join("; ");
 
 	return `
 	<style>
@@ -581,17 +624,13 @@ export function renderPublicBar(config: BarConfig): string {
 			flex: 1;
 			overflow: hidden;
 		}
-		${config.customCss ? config.customCss : ""}
-		.smarter-announcement-bar-root {
+		${(config.customCss && config.customCss.includes("{")) ? config.customCss : ""}
+		#${barDomId}.smarter-announcement-bar-root {
 			width: 100%;
-			background: ${
-				config.backgroundType === "gradient"
-					? (config.backgroundGradient || `linear-gradient(${config.gradientDirection || "90deg"}, ${config.gradientStartColor || config.backgroundColor || "#84cc16"} 0%, ${config.gradientEndColor || "#38bdf8"} 100%)`)
-					: config.backgroundType === "image" && config.backgroundImage
-					? `url("${config.backgroundImage}") center/cover no-repeat`
-					: (config.backgroundColor || "#84cc16")
-			};
-			color: ${config.textColor || "#000000"};
+			background: ${barBg} !important;
+			${barBgSize ? `background-size: ${barBgSize} !important;` : ""}
+			${barBgRepeat ? `background-repeat: ${barBgRepeat} !important;` : ""}
+			color: ${config.textColor || "#000000"} !important;
 			font-size: ${config.fontSizePx ? `${config.fontSizePx}px` : fontSize};
 			padding: ${pad};
 			box-sizing: border-box;
@@ -602,11 +641,21 @@ export function renderPublicBar(config: BarConfig): string {
 			position: relative;
 			font-family: ${config.fontFamily ? `${config.fontFamily}, sans-serif` : "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"};
 		}
-		.smarter-announcement-bar-root.is-bottom {
+		#${barDomId}.smarter-announcement-bar-root.is-bottom {
 			box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
 		}
-		.smarter-announcement-bar-root.is-top {
+		#${barDomId}.smarter-announcement-bar-root.is-top {
 			box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+		}
+		#${barDomId} .smarter-cta-btn {
+			background-color: ${config.buttonBackgroundColor || "#000000"} !important;
+			color: ${config.buttonTextColor || "#ffffff"} !important;
+			border: ${btnBorder};
+			border-radius: ${config.buttonBorderRadius ?? 1}px;
+			padding: ${config.buttonPaddingTopBottom ?? 5}px ${config.buttonPaddingLeftRight ?? 12}px;
+			font-weight: 600;
+			font-size: ${config.buttonFontSizePx ?? 16}px;
+			cursor: pointer;
 		}
 		.hide-always { display: none !important; }
 		@media (min-width: 641px) {
@@ -614,13 +663,13 @@ export function renderPublicBar(config: BarConfig): string {
 		}
 		@media (max-width: 640px) {
 			.hide-on-mobile { display: none !important; }
-			.smarter-announcement-bar-root {
+			#${barDomId}.smarter-announcement-bar-root {
 				flex-direction: column;
 				text-align: center;
 				gap: 8px;
 				font-size: ${config.mobileFontSizePx ? `${config.mobileFontSizePx}px` : "12px"};
 			}
-			.smarter-cta-btn {
+			#${barDomId} .smarter-cta-btn {
 				font-size: ${config.buttonMobileFontSizePx ? `${config.buttonMobileFontSizePx}px` : "12px"} !important;
 			}
 		}
@@ -677,19 +726,22 @@ export function renderPublicBar(config: BarConfig): string {
 			letter-spacing: -0.2px;
 		}
 	</style>
-	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"} smarter-annoucement-bar-front-container" data-bar-id="${barIdClean}">
+	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"} smarter-annoucement-bar-front-container" style="${barInlineStyles.replace(/"/g, "&quot;")}" data-bar-id="${barIdClean}">
 		${
 			showDiscountRightaway
 				? `<div class="smarter-content-container is-static">
+						${isButtonInline && buttonPos === "left" ? buttonHtml : ""}
 						<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${anyConfig.couponBarText || "Click to copy your coupon"}</span>
 						${discountHtml}
-						${isButtonInline ? buttonHtml : ""}
+						${isButtonInline && buttonPos !== "left" ? buttonHtml : ""}
 				   </div>`
 				: isMarquee
 				? `<div class="smarter-content-container is-marquee">
 						<div class="smarter-ticker-track">
+							${isButtonInline && buttonPos === "left" ? buttonHtml : ""}
 							${marqueeItemsHtml}
 							${discountHtml}
+							${isButtonInline && buttonPos !== "left" ? buttonHtml : ""}
 						</div>
 				   </div>`
 				: isSliding
@@ -697,14 +749,16 @@ export function renderPublicBar(config: BarConfig): string {
 						<div class="smarter-slider-wrapper">
 							${slidingItemsHtml}
 						</div>
+						${isButtonInline ? buttonHtml : ""}
 				   </div>`
 				: `<div class="smarter-content-container is-static">
 						${isIconRight ? "" : iconHtml}
+						${isButtonInline && buttonPos === "left" ? buttonHtml : ""}
 						<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${formatText(config.text || messages[0])}</span>
 						${isIconRight ? iconHtml : ""}
 						${discountHtml}
 						${leadFormHtml}
-						${isButtonInline ? buttonHtml : ""}
+						${isButtonInline && buttonPos !== "left" ? buttonHtml : ""}
 				   </div>`
 		}
 		<div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
