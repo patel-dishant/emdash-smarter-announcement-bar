@@ -1,8 +1,10 @@
 {
-  "id": "bar_1792923017339",
-  "views": 1,
+  "id": "bar_1793347488390",
+  "views": 2,
+  "clicks": 0,
+  "leads": 0,
   "enabled": true,
-  "name": "Test1",
+  "name": "New Announcement Bar",
   "position": "top",
   "closeButtonDevices": [
     "desktop",
@@ -58,18 +60,87 @@
   "couponBarText": "Click to copy your coupon",
   "copiedTooltipText": "copied",
   "discountText": "Click to copy your coupon",
+  "closeButtonColor": "#000000",
+  "backgroundType": "color",
+  "backgroundGradient": "linear-gradient(45deg, #fbc6a4 0%, #d94680 50%, #3b1c66 100%)",
+  "gradientColorA": "#fbc6a4",
+  "gradientColorB": "#d94680",
+  "gradientColorC": "#3b1c66",
+  "gradientMiddleEnabled": true,
+  "gradientAngle": 45,
+  "gradientStartColor": "#fbc6a4",
+  "gradientEndColor": "#3b1c66",
+  "gradientDirection": "45deg",
+  "backgroundImage": "",
+  "backgroundRepeat": "repeat",
+  "backgroundSize": 50,
   "backgroundColor": "#8ce99a",
   "textColor": "#000000",
+  "fontFamily": "Arial",
+  "fontSizePx": 16,
+  "mobileFontSizePx": 12,
+  "textAlign": "center",
+  "buttonPositionRelative": false,
+  "buttonPosition": "center",
+  "buttonFontSizePx": 16,
+  "buttonPaddingTopBottom": 5,
+  "buttonPaddingLeftRight": 12,
+  "buttonBorderRadius": 1,
+  "buttonBorderStyle": "none",
+  "buttonBorderColor": "#000000",
+  "buttonBorderWidth": 1,
+  "buttonMobileFontSizePx": 12,
   "buttonBackgroundColor": "#000000",
   "buttonTextColor": "#ffffff",
+  "customCss": ".smarter-annoucement-bar-front-container.smarter-annoucement-bar-form-wrapper.smarter-annoucement-bar-modal-content",
   "fontSize": "base",
   "padding": "normal",
+  "devices": [
+    "desktop",
+    "mobile"
+  ],
+  "entryEffect": "slide",
+  "triggerType": "seconds",
+  "triggerSeconds": 0,
+  "triggerScrollPercentage": 50,
+  "dateSchedulingTimezone": "Central African Republic/Bangui",
+  "dateRanges": [
+    {
+      "id": "range_1",
+      "start": "",
+      "end": ""
+    },
+    {
+      "id": "range_2",
+      "start": "",
+      "end": ""
+    },
+    {
+      "id": "range_3",
+      "start": "",
+      "end": ""
+    }
+  ],
+  "pageRules": [
+    {
+      "id": "rule_1",
+      "mode": "show",
+      "rule": "select_rule",
+      "value": ""
+    }
+  ],
+  "userTargeting": "all",
+  "desktopOs": "",
+  "desktopBrowser": "",
+  "mobileOs": "",
+  "mobileBrowser": "",
+  "countryTargeting": "",
+  "languageTargetingEnabled": false,
+  "languageTargeting": [],
   "targetPages": "all",
   "targetUrls": "",
   "targetDevices": "all",
   "targetVisitors": "all",
   "startDate": "",
-  "endDate": "",
-  "clicks": 1,
-  "leads": 1
+  "endDate": ""
 }

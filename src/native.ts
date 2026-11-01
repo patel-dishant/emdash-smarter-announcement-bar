@@ -92,6 +92,30 @@ export interface BarConfig {
 	buttonTextColor: string;
 	fontSize: "sm" | "md" | "lg";
 	padding: "compact" | "normal" | "spacious";
+
+	// Step 3: Display Rules
+	devices?: ("desktop" | "mobile")[];
+	entryEffect?: "none" | "slide" | "fade";
+	triggerType?: "seconds" | "scroll";
+	triggerSeconds?: number;
+	triggerScrollPercentage?: number;
+	dateSchedulingTimezone?: string;
+	dateRanges?: Array<{ id: string; start: string; end: string }>;
+	pageRules?: Array<{ id: string; mode: "show" | "hide"; rule: string; value?: string }>;
+	userTargeting?: string;
+	desktopOs?: string;
+	desktopBrowser?: string;
+	mobileOs?: string;
+	mobileBrowser?: string;
+	countryTargeting?: string;
+	languageTargetingEnabled?: boolean;
+	languageTargeting?: string[];
+	targetPages?: string;
+	targetUrls?: string;
+	targetDevices?: string;
+	targetVisitors?: string;
+	startDate?: string;
+	endDate?: string;
 }
 
 const DEFAULT_CONFIG: BarConfig = {
@@ -166,6 +190,36 @@ const DEFAULT_CONFIG: BarConfig = {
 	buttonTextColor: "#ffffff",
 	fontSize: "md",
 	padding: "normal",
+
+	// Step 3: Display Rules
+	devices: ["desktop", "mobile"],
+	entryEffect: "none",
+	triggerType: "seconds",
+	triggerSeconds: 0,
+	triggerScrollPercentage: 50,
+	dateSchedulingTimezone: "Central African Republic/Bangui",
+	dateRanges: [
+		{ id: "range_1", start: "", end: "" },
+		{ id: "range_2", start: "", end: "" },
+		{ id: "range_3", start: "", end: "" },
+	],
+	pageRules: [
+		{ id: "rule_1", mode: "show", rule: "select_rule", value: "" },
+	],
+	userTargeting: "all",
+	desktopOs: "",
+	desktopBrowser: "",
+	mobileOs: "",
+	mobileBrowser: "",
+	countryTargeting: "",
+	languageTargetingEnabled: false,
+	languageTargeting: [],
+	targetPages: "all",
+	targetUrls: "",
+	targetDevices: "all",
+	targetVisitors: "all",
+	startDate: "",
+	endDate: "",
 };
 
 export function getPublishedBars(): BarConfig[] {
@@ -174,7 +228,7 @@ export function getPublishedBars(): BarConfig[] {
 			const data = readFileSync(barsConfigFile, "utf-8");
 			const parsed = JSON.parse(data);
 			if (Array.isArray(parsed) && parsed.length > 0) {
-				return parsed;
+				return parsed.map((b) => ({ ...DEFAULT_CONFIG, ...b }));
 			}
 		}
 	} catch {
@@ -233,6 +287,13 @@ export function savePublishedConfig(config: BarConfig): void {
 			} else {
 				bars.push({ ...config, id: "bar_1" });
 			}
+		}
+		if (config.enabled) {
+			bars.forEach((b) => {
+				if (b.id !== config.id && b.position === config.position) {
+					b.enabled = false;
+				}
+			});
 		}
 		writeFileSync(barsConfigFile, JSON.stringify(bars, null, 2), "utf-8");
 		// Keep published-bar.json synced
@@ -673,6 +734,64 @@ export function renderPublicBar(config: BarConfig): string {
 				font-size: ${config.buttonMobileFontSizePx ? `${config.buttonMobileFontSizePx}px` : "12px"} !important;
 			}
 		}
+
+		/* Step 3: Entry animations & device rules */
+		@keyframes smarterSlideInTop {
+			0% {
+				transform: translateY(-100%);
+				opacity: 0;
+			}
+			100% {
+				transform: translateY(0);
+				opacity: 1;
+			}
+		}
+		@keyframes smarterSlideInBottom {
+			0% {
+				transform: translateY(100%);
+				opacity: 0;
+			}
+			100% {
+				transform: translateY(0);
+				opacity: 1;
+			}
+		}
+		@keyframes smarterFadeIn {
+			0% {
+				opacity: 0;
+			}
+			100% {
+				opacity: 1;
+			}
+		}
+
+		/* Initial states when entry effect is active (keeps bar hidden/tucked offscreen until animation triggers) */
+		#${barDomId}.entry-effect-slide.is-top:not(.entry-animated) {
+			transform: translateY(-100%);
+			opacity: 0;
+		}
+		#${barDomId}.entry-effect-slide.is-bottom:not(.entry-animated) {
+			transform: translateY(100%);
+			opacity: 0;
+		}
+		#${barDomId}.entry-effect-fade:not(.entry-animated) {
+			opacity: 0;
+		}
+
+		/* Active animation states triggered by revealBar() */
+		#${barDomId}.entry-animated.entry-effect-slide.is-top {
+			animation: smarterSlideInTop 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+		}
+		#${barDomId}.entry-animated.entry-effect-slide.is-bottom {
+			animation: smarterSlideInBottom 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+		}
+		#${barDomId}.entry-animated.entry-effect-fade {
+			animation: smarterFadeIn 0.8s ease-out forwards !important;
+		}
+
+		${(config.devices && !config.devices.includes("desktop")) ? `@media (min-width: 768px) { #${barDomId} { display: none !important; } }` : ""}
+		${(config.devices && !config.devices.includes("mobile")) ? `@media (max-width: 767px) { #${barDomId} { display: none !important; } }` : ""}
+		${(config.triggerType === "scroll" || (config.triggerType === "seconds" && (config.triggerSeconds || 0) > 0)) ? `#${barDomId} { display: none !important; }` : ""}
 		.smarter-countdown-root {
 			display: inline-flex;
 			align-items: center;
@@ -726,7 +845,7 @@ export function renderPublicBar(config: BarConfig): string {
 			letter-spacing: -0.2px;
 		}
 	</style>
-	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"} smarter-annoucement-bar-front-container" style="${barInlineStyles.replace(/"/g, "&quot;")}" data-bar-id="${barIdClean}">
+	<div id="${barDomId}" class="smarter-announcement-bar-root ${config.position === "bottom" ? "is-bottom" : "is-top"} entry-effect-${config.entryEffect || "none"} smarter-annoucement-bar-front-container" style="${barInlineStyles.replace(/"/g, "&quot;")}" data-bar-id="${barIdClean}">
 		${
 			showDiscountRightaway
 				? `<div class="smarter-content-container is-static">
@@ -812,9 +931,11 @@ export function renderPublicBar(config: BarConfig): string {
 			tick();
 			setInterval(tick, 1000);
 		})();
-		(function() {
+		(function initDisplayRules_${barIdClean}() {
 			var barEl = document.getElementById('${barDomId}');
 			if (!barEl) return;
+
+			// 1. Check dismissal
 			var appearance = "${appearanceAfterClick}";
 			var isDismissed = false;
 			if (appearance === "dont_show") {
@@ -824,24 +945,199 @@ export function renderPublicBar(config: BarConfig): string {
 			}
 			if (isDismissed) {
 				barEl.style.display = 'none';
-			} else {
-				// Track view impression for this bar
-				(function() {
-					var barId = "${config.id || barIdClean}";
-					var vKey = "smarter_viewed_" + barId;
-					if (!sessionStorage.getItem(vKey)) {
-						sessionStorage.setItem(vKey, "1");
-						try {
-							fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
-								method: "POST",
-								headers: { "Content-Type": "application/json" },
-								body: JSON.stringify({ barId: barId, event: "view" }),
-								keepalive: true
-							});
-						} catch(e) {}
-					}
-				})();
+				return;
 			}
+
+			// 2. Check Device Targeting
+			var devList = ${JSON.stringify(config.devices || ["desktop", "mobile"])};
+			var isMob = window.innerWidth < 768;
+			if (devList.length === 0) {
+				barEl.style.display = 'none';
+				return;
+			}
+			if (isMob && !devList.includes("mobile")) {
+				barEl.style.display = 'none';
+				return;
+			}
+			if (!isMob && !devList.includes("desktop")) {
+				barEl.style.display = 'none';
+				return;
+			}
+
+			// 3. Check User Targeting
+			var userTarget = "${config.userTargeting || "all"}";
+			var hasVisited = localStorage.getItem('smarter_bar_has_visited') === 'true';
+			if (userTarget === "new" && hasVisited) {
+				barEl.style.display = 'none';
+				return;
+			}
+			if (userTarget === "returning" && !hasVisited) {
+				barEl.style.display = 'none';
+				return;
+			}
+			localStorage.setItem('smarter_bar_has_visited', 'true');
+
+			// 4. Check Date Ranges
+			var dateRanges = ${JSON.stringify(config.dateRanges || [])};
+			var activeRanges = dateRanges.filter(function(r) { return r && (Boolean(r.start && r.start.trim()) || Boolean(r.end && r.end.trim())); });
+			if (activeRanges.length > 0) {
+				var now = Date.now();
+				var inRange = activeRanges.some(function(r) {
+					var s = (r.start && r.start.trim()) ? new Date(r.start.trim().replace(' ', 'T')).getTime() : 0;
+					var endStr = r.end ? r.end.trim() : "";
+					if (endStr && endStr.length === 10) endStr += " 23:59:59";
+					else if (endStr && endStr.endsWith(" 00:00:00")) endStr = endStr.replace(" 00:00:00", " 23:59:59");
+					var e = endStr ? new Date(endStr.replace(' ', 'T')).getTime() : Infinity;
+					return (isNaN(s) || now >= s) && (isNaN(e) || now <= e);
+				});
+				if (!inRange) {
+					barEl.style.display = 'none';
+					return;
+				}
+			}
+
+			// 5. Check Page Targeting
+			var pageRules = ${JSON.stringify(config.pageRules || [])};
+			var curPath = window.location.pathname || "/";
+			var validRules = pageRules.filter(function(r) { return r && r.rule && r.rule !== "select_rule"; });
+			if (validRules.length > 0) {
+				function matchRule(r) {
+					if (r.rule === "all") return true;
+					if (r.rule === "homepage") return curPath === "/" || curPath === "";
+					var val = (r.value || "").trim().toLowerCase();
+					var path = curPath.toLowerCase();
+					if (r.rule === "contains") return path.includes(val);
+					if (r.rule === "starts_with") return path.startsWith(val);
+					if (r.rule === "ends_with") return path.endsWith(val);
+					if (r.rule === "exact") return path === val;
+					return false;
+				}
+
+				// If any hide rule matches, don't show
+				var hideMatched = validRules.some(function(r) { return r.mode === "hide" && matchRule(r); });
+				if (hideMatched) {
+					barEl.style.display = 'none';
+					return;
+				}
+
+				// If show rules are present, at least one must match
+				var showRules = validRules.filter(function(r) { return r.mode === "show"; });
+				if (showRules.length > 0) {
+					var showMatched = showRules.some(function(r) { return matchRule(r); });
+					if (!showMatched) {
+						barEl.style.display = 'none';
+						return;
+					}
+				}
+			}
+
+			// 6. Check Desktop OS / Browser / Mobile OS / Browser targeting
+			var ua = navigator.userAgent.toLowerCase();
+			var dOs = "${config.desktopOs || ""}";
+			var dBr = "${config.desktopBrowser || ""}";
+			var mOs = "${config.mobileOs || ""}";
+			var mBr = "${config.mobileBrowser || ""}";
+
+			if (!isMob) {
+				if (dOs && dOs !== "all") {
+					if (dOs === "windows" && !ua.includes("windows")) { barEl.style.display = 'none'; return; }
+					if (dOs === "macos" && (!ua.includes("macintosh") || ua.includes("iphone") || ua.includes("ipad"))) { barEl.style.display = 'none'; return; }
+					if (dOs === "linux" && !ua.includes("linux")) { barEl.style.display = 'none'; return; }
+					if (dOs === "chromeos" && !ua.includes("cros")) { barEl.style.display = 'none'; return; }
+				}
+				if (dBr && dBr !== "all") {
+					if (dBr === "chrome" && (!ua.includes("chrome") || ua.includes("edg") || ua.includes("opr"))) { barEl.style.display = 'none'; return; }
+					if (dBr === "safari" && (!ua.includes("safari") || ua.includes("chrome") || ua.includes("crios"))) { barEl.style.display = 'none'; return; }
+					if (dBr === "firefox" && !ua.includes("firefox")) { barEl.style.display = 'none'; return; }
+					if (dBr === "edge" && !ua.includes("edg")) { barEl.style.display = 'none'; return; }
+					if (dBr === "opera" && (!ua.includes("opr") && !ua.includes("opera"))) { barEl.style.display = 'none'; return; }
+				}
+			} else {
+				if (mOs && mOs !== "all") {
+					if (mOs === "ios" && !/iphone|ipad|ipod/.test(ua)) { barEl.style.display = 'none'; return; }
+					if (mOs === "android" && !ua.includes("android")) { barEl.style.display = 'none'; return; }
+				}
+				if (mBr && mBr !== "all") {
+					if (mBr === "safari" && (!ua.includes("safari") || ua.includes("crios") || ua.includes("chrome"))) { barEl.style.display = 'none'; return; }
+					if (mBr === "chrome" && (!ua.includes("chrome") && !ua.includes("crios"))) { barEl.style.display = 'none'; return; }
+					if (mBr === "samsung" && !ua.includes("samsungbrowser")) { barEl.style.display = 'none'; return; }
+					if (mBr === "firefox" && !ua.includes("firefox") && !ua.includes("fxios")) { barEl.style.display = 'none'; return; }
+				}
+			}
+
+			// 7. Check Language Targeting
+			var langEnabled = ${Boolean(config.languageTargetingEnabled)};
+			var targetLangs = ${JSON.stringify(config.languageTargeting || [])};
+			if (langEnabled && targetLangs.length > 0) {
+				var userLang = (navigator.language || navigator.userLanguage || "").toLowerCase();
+				var langMatched = targetLangs.some(function(l) { return userLang.startsWith(l.toLowerCase()); });
+				if (!langMatched) {
+					barEl.style.display = 'none';
+					return;
+				}
+			}
+
+			// 8. Trigger & Entry Effect Handling
+			var trigType = "${config.triggerType || "seconds"}";
+			var trigSec = ${Number(config.triggerSeconds || 0)};
+			var trigScroll = ${Number(config.triggerScrollPercentage || 50)};
+			var entryEff = "${config.entryEffect || "none"}";
+
+			function revealBar() {
+				barEl.style.setProperty('display', 'flex', 'important');
+				if (entryEff !== "none") {
+					barEl.classList.add('entry-animated');
+				}
+				if (typeof window.recalcSmarterBottomPadding === 'function') {
+					window.recalcSmarterBottomPadding();
+				}
+				// Track view impression for this bar
+				var barId = "${config.id || barIdClean}";
+				var vKey = "smarter_viewed_" + barId;
+				if (!sessionStorage.getItem(vKey)) {
+					sessionStorage.setItem(vKey, "1");
+					try {
+						fetch("/_emdash/api/plugins/smarter-announcement-bar/track", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ barId: barId, event: "view" }),
+							keepalive: true
+						});
+					} catch(e) {}
+				}
+			}
+
+			if (trigType === "seconds" && trigSec > 0) {
+				barEl.style.display = 'none';
+				setTimeout(revealBar, trigSec * 1000);
+			} else if (trigType === "scroll") {
+				barEl.style.display = 'none';
+				var scrolled = false;
+				function onScrollTrigger() {
+					if (scrolled) return;
+					var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+					var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+					var pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 100;
+					if (pct >= trigScroll) {
+						scrolled = true;
+						window.removeEventListener('scroll', onScrollTrigger);
+						revealBar();
+					}
+				}
+				window.addEventListener('scroll', onScrollTrigger, { passive: true });
+				onScrollTrigger();
+			} else {
+				// Immediate trigger (0s delay)
+				// Small timeout ensures initial DOM paint completes so slide/fade entry animation visibly plays
+				if (document.readyState === 'loading') {
+					document.addEventListener('DOMContentLoaded', function() {
+						setTimeout(revealBar, 60);
+					});
+				} else {
+					setTimeout(revealBar, 60);
+				}
+			}
+		})();
 
 			// Adjust bottom padding if needed
 			if (typeof window.recalcSmarterBottomPadding === 'function') {
@@ -1092,7 +1388,7 @@ export function createPlugin(options = {}) {
 
 					if (topBars.length > 0) {
 						const topHtml = `
-							<div id="smarter-top-bars-container" style="position: relative; width: 100%; z-index: 99999; display: flex; flex-direction: column;">
+							<div id="smarter-top-bars-container" style="position: relative; width: 100%; z-index: 99999; display: flex; flex-direction: column; overflow: hidden;">
 								${topBars.map((b) => renderPublicBar(b)).join("\n")}
 							</div>
 						`;
@@ -1105,7 +1401,7 @@ export function createPlugin(options = {}) {
 
 					if (bottomBars.length > 0) {
 						const bottomHtml = `
-							<div id="smarter-bottom-bars-container" style="position: fixed; bottom: 0; left: 0; right: 0; z-index: 99999; display: flex; flex-direction: column; box-shadow: 0 -2px 10px rgba(0,0,0,0.12);">
+							<div id="smarter-bottom-bars-container" style="position: fixed; bottom: 0; left: 0; right: 0; z-index: 99999; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 -2px 10px rgba(0,0,0,0.12);">
 								${bottomBars.map((b) => renderPublicBar(b)).join("\n")}
 							</div>
 						`;

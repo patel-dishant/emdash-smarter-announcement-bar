@@ -132,12 +132,32 @@ export interface BarConfig {
 	padding: "compact" | "normal" | "spacious";
 
 	// Step 3: Display Rules
-	targetPages: "all" | "homepage" | "custom";
-	targetUrls: string;
-	targetDevices: "all" | "desktop" | "mobile";
-	targetVisitors: "all" | "new" | "returning";
-	startDate: string;
-	endDate: string;
+	devices: ("desktop" | "mobile")[];
+	entryEffect: "none" | "slide" | "fade";
+	triggerType: "seconds" | "scroll";
+	triggerSeconds: number;
+	triggerScrollPercentage?: number;
+
+	// Targeting Rules
+	dateSchedulingTimezone: string;
+	dateRanges: Array<{ id: string; start: string; end: string }>;
+	pageRules: Array<{ id: string; mode: "show" | "hide"; rule: string; value?: string }>;
+	userTargeting: string;
+	desktopOs: string;
+	desktopBrowser: string;
+	mobileOs: string;
+	mobileBrowser: string;
+	countryTargeting: string;
+	languageTargetingEnabled: boolean;
+	languageTargeting: string[];
+
+	// Legacy compatibility
+	targetPages?: "all" | "homepage" | "custom";
+	targetUrls?: string;
+	targetDevices?: "all" | "desktop" | "mobile";
+	targetVisitors?: "all" | "new" | "returning";
+	startDate?: string;
+	endDate?: string;
 }
 
 const DEFAULT_CONFIG: BarConfig = {
@@ -228,6 +248,30 @@ const DEFAULT_CONFIG: BarConfig = {
 	customCss: ".smarter-annoucement-bar-front-container.smarter-annoucement-bar-form-wrapper.smarter-annoucement-bar-modal-content",
 	fontSize: "base",
 	padding: "normal",
+
+	// Step 3: Display Rules
+	devices: ["desktop", "mobile"],
+	entryEffect: "none",
+	triggerType: "seconds",
+	triggerSeconds: 0,
+	triggerScrollPercentage: 50,
+	dateSchedulingTimezone: "Central African Republic/Bangui",
+	dateRanges: [
+		{ id: "range_1", start: "", end: "" },
+		{ id: "range_2", start: "", end: "" },
+		{ id: "range_3", start: "", end: "" },
+	],
+	pageRules: [
+		{ id: "rule_1", mode: "show", rule: "select_rule", value: "" },
+	],
+	userTargeting: "all",
+	desktopOs: "",
+	desktopBrowser: "",
+	mobileOs: "",
+	mobileBrowser: "",
+	countryTargeting: "",
+	languageTargetingEnabled: false,
+	languageTargeting: [],
 	targetPages: "all",
 	targetUrls: "",
 	targetDevices: "all",
@@ -768,6 +812,36 @@ export const IMAGE_PRESETS: ImagePreset[] = [
 	},
 ];
 
+function mergeDefaults(raw: any): BarConfig {
+	if (!raw) return DEFAULT_CONFIG;
+	return {
+		...DEFAULT_CONFIG,
+		...raw,
+		devices: Array.isArray(raw.devices) && raw.devices.length > 0
+			? raw.devices
+			: (raw.targetDevices === "desktop" ? ["desktop"] : raw.targetDevices === "mobile" ? ["mobile"] : DEFAULT_CONFIG.devices),
+		entryEffect: raw.entryEffect || DEFAULT_CONFIG.entryEffect,
+		triggerType: raw.triggerType || DEFAULT_CONFIG.triggerType,
+		triggerSeconds: raw.triggerSeconds ?? DEFAULT_CONFIG.triggerSeconds,
+		triggerScrollPercentage: raw.triggerScrollPercentage ?? DEFAULT_CONFIG.triggerScrollPercentage,
+		dateSchedulingTimezone: raw.dateSchedulingTimezone || DEFAULT_CONFIG.dateSchedulingTimezone,
+		dateRanges: Array.isArray(raw.dateRanges) && raw.dateRanges.length > 0
+			? raw.dateRanges
+			: DEFAULT_CONFIG.dateRanges,
+		pageRules: Array.isArray(raw.pageRules) && raw.pageRules.length > 0
+			? raw.pageRules
+			: DEFAULT_CONFIG.pageRules,
+		userTargeting: raw.userTargeting || DEFAULT_CONFIG.userTargeting,
+		desktopOs: raw.desktopOs ?? DEFAULT_CONFIG.desktopOs,
+		desktopBrowser: raw.desktopBrowser ?? DEFAULT_CONFIG.desktopBrowser,
+		mobileOs: raw.mobileOs ?? DEFAULT_CONFIG.mobileOs,
+		mobileBrowser: raw.mobileBrowser ?? DEFAULT_CONFIG.mobileBrowser,
+		countryTargeting: raw.countryTargeting ?? DEFAULT_CONFIG.countryTargeting,
+		languageTargetingEnabled: raw.languageTargetingEnabled ?? DEFAULT_CONFIG.languageTargetingEnabled,
+		languageTargeting: Array.isArray(raw.languageTargeting) ? raw.languageTargeting : DEFAULT_CONFIG.languageTargeting,
+	};
+}
+
 export function CustomizeBarPage() {
 	// Navigation & step state
 	const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
@@ -776,6 +850,7 @@ export function CustomizeBarPage() {
 	const [previewThankYouShown, setPreviewThankYouShown] = useState(false);
 	const [previewCouponShown, setPreviewCouponShown] = useState(false);
 	const [previewCollapsed, setPreviewCollapsed] = useState(false);
+	const [previewEffectKey, setPreviewEffectKey] = useState(0);
 	const [copiedFeedback, setCopiedFeedback] = useState(false);
 	const [status, setStatus] = useState<"unsaved" | "saved" | "publishing" | "published">("saved");
 	const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -803,13 +878,13 @@ export function CustomizeBarPage() {
 				if (savedBars) {
 					const list: BarConfig[] = JSON.parse(savedBars);
 					const match = list.find((b) => b.id === barId);
-					if (match) return match;
+					if (match) return mergeDefaults(match);
 				}
 			}
 			const savedDraft = localStorage.getItem(STORAGE_KEY_DRAFT);
-			if (savedDraft) return JSON.parse(savedDraft);
+			if (savedDraft) return mergeDefaults(JSON.parse(savedDraft));
 			const published = localStorage.getItem(STORAGE_KEY_PUBLISHED);
-			if (published) return JSON.parse(published);
+			if (published) return mergeDefaults(JSON.parse(published));
 		} catch {
 			// ignore storage errors
 		}
@@ -883,7 +958,14 @@ export function CustomizeBarPage() {
 					if (barId) {
 						const match = data.bars.find((b: any) => b.id === barId);
 						if (match) {
-							setConfig(match);
+							setConfig(mergeDefaults(match));
+							return;
+						}
+					} else {
+						// When no ?id= is passed in URL, load the active bar or first bar from server
+						const activeBar = data.bars.find((b: any) => b.enabled) || data.bars[0];
+						if (activeBar) {
+							setConfig(mergeDefaults(activeBar));
 							return;
 						}
 					}
@@ -939,6 +1021,9 @@ export function CustomizeBarPage() {
 	// Field updater helper
 	const update = <K extends keyof BarConfig>(key: K, value: BarConfig[K]) => {
 		setConfig((prev) => ({ ...prev, [key]: value }));
+		if (key === "entryEffect" || key === "position") {
+			setPreviewEffectKey((prev) => prev + 1);
+		}
 		if (errors[key]) {
 			setErrors((prev) => {
 				const next = { ...prev };
@@ -1359,6 +1444,63 @@ export function CustomizeBarPage() {
 		}
 	};
 
+	// Multi-select toggle for Step 3 Display Devices
+	const toggleDisplayDevice = (device: "desktop" | "mobile") => {
+		const current = config.devices || ["desktop", "mobile"];
+		const updated = current.includes(device)
+			? current.filter((d) => d !== device)
+			: [...current, device];
+		update("devices", updated);
+	};
+
+	// Date Ranges handlers
+	const handleAddDateRange = () => {
+		const ranges = config.dateRanges || [];
+		const nextId = `range_${Date.now()}_${ranges.length + 1}`;
+		update("dateRanges", [...ranges, { id: nextId, start: "", end: "" }]);
+	};
+
+	const handleUpdateDateRange = (index: number, field: "start" | "end", val: string) => {
+		const ranges = [...(config.dateRanges || [])];
+		if (ranges[index]) {
+			ranges[index] = { ...ranges[index], [field]: val };
+			update("dateRanges", ranges);
+		}
+	};
+
+	const handleDeleteDateRange = (index: number) => {
+		const ranges = config.dateRanges || [];
+		if (ranges.length <= 1) {
+			update("dateRanges", [{ id: `range_${Date.now()}`, start: "", end: "" }]);
+			return;
+		}
+		update("dateRanges", ranges.filter((_, i) => i !== index));
+	};
+
+	// Page Rules handlers
+	const handleAddPageRule = () => {
+		const rules = config.pageRules || [];
+		const nextId = `rule_${Date.now()}_${rules.length + 1}`;
+		update("pageRules", [...rules, { id: nextId, mode: "show", rule: "select_rule", value: "" }]);
+	};
+
+	const handleUpdatePageRule = (index: number, field: "mode" | "rule" | "value", val: string) => {
+		const rules = [...(config.pageRules || [])];
+		if (rules[index]) {
+			rules[index] = { ...rules[index], [field]: val };
+			update("pageRules", rules);
+		}
+	};
+
+	const handleDeletePageRule = (index: number) => {
+		const rules = config.pageRules || [];
+		if (rules.length <= 1) {
+			update("pageRules", [{ id: `rule_${Date.now()}`, mode: "show", rule: "select_rule", value: "" }]);
+			return;
+		}
+		update("pageRules", rules.filter((_, i) => i !== index));
+	};
+
 	// Validate step
 	const validateStep = (step: 1 | 2 | 3): boolean => {
 		const errs: Record<string, string> = {};
@@ -1430,11 +1572,27 @@ export function CustomizeBarPage() {
 				});
 			}
 
-			// Persist to local storage
+			// When a bar is published as active, disable other bars with the same placement (top/bottom)
+			// so the newly saved bar is reliably displayed without conflicts
+			if (toPublish.enabled) {
+				barsList = barsList.map((b) =>
+					(b.id !== toPublish.id && b.position === toPublish.position)
+						? { ...b, enabled: false }
+						: b
+				);
+			}
+
+			// Persist to local storage & clear any test dismissal flags
 			try {
 				localStorage.setItem(STORAGE_KEY_PUBLISHED, JSON.stringify(toPublish));
 				localStorage.setItem(STORAGE_KEY_DRAFT, JSON.stringify(toPublish));
 				localStorage.setItem(STORAGE_KEY_BARS, JSON.stringify(barsList));
+				if (toPublish.id) {
+					localStorage.removeItem(`smarter_bar_dismissed_${toPublish.id}`);
+					localStorage.removeItem(`smarter_bar_dismissed_bar_${toPublish.id}`);
+					sessionStorage.removeItem(`smarter_bar_dismissed_${toPublish.id}`);
+					sessionStorage.removeItem(`smarter_bar_dismissed_bar_${toPublish.id}`);
+				}
 			} catch {}
 
 			// Persist to server API route so public site can render it
@@ -1752,9 +1910,51 @@ export function CustomizeBarPage() {
 					justify-content: space-between;
 					padding: 10px 18px;
 					position: relative;
-					transition: all 0.2s ease;
 					min-height: 44px;
 					gap: 12px;
+				}
+				.announcement-bar-preview.entry-effect-none {
+					transition: background 0.2s ease, padding 0.2s ease, color 0.2s ease;
+				}
+
+				/* Entry Effect Animations for Live Preview */
+				.announcement-bar-preview.entry-effect-slide.placement-top {
+					animation: smarterSlideInTop 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+				}
+				.announcement-bar-preview.entry-effect-slide.placement-bottom {
+					animation: smarterSlideInBottom 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+				}
+				.announcement-bar-preview.entry-effect-fade {
+					animation: smarterFadeIn 0.8s ease-out forwards;
+				}
+
+				@keyframes smarterSlideInTop {
+					0% {
+						transform: translateY(-100%);
+						opacity: 0;
+					}
+					100% {
+						transform: translateY(0);
+						opacity: 1;
+					}
+				}
+				@keyframes smarterSlideInBottom {
+					0% {
+						transform: translateY(100%);
+						opacity: 0;
+					}
+					100% {
+						transform: translateY(0);
+						opacity: 1;
+					}
+				}
+				@keyframes smarterFadeIn {
+					0% {
+						opacity: 0;
+					}
+					100% {
+						opacity: 1;
+					}
 				}
 				.announcement-bar-content {
 					display: flex;
@@ -2857,6 +3057,82 @@ export function CustomizeBarPage() {
 					line-height: 1.1;
 					letter-spacing: -0.2px;
 				}
+
+				/* Step 3: Display Rules specific styles */
+				.step-banner-box {
+					background: #eff6ff;
+					border: 1px solid #dbeafe;
+					border-radius: 8px;
+					padding: 16px 20px;
+					margin-bottom: 20px;
+				}
+				.step-banner-title {
+					color: var(--primary-blue);
+					font-size: 18px;
+					font-weight: 700;
+					margin: 0;
+					line-height: 1.2;
+				}
+				.card-divider {
+					border: 0;
+					border-top: 1px solid #f1f5f9;
+					margin: 16px 0 20px 0;
+				}
+				.btn-icon-trash {
+					background: #fee2e2;
+					color: #ef4444;
+					border: none;
+					border-radius: 6px;
+					width: 40px;
+					height: 40px;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					cursor: pointer;
+					transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+					flex-shrink: 0;
+				}
+				.btn-icon-trash:hover {
+					background: #fecaca;
+					color: #dc2626;
+					transform: scale(1.04);
+				}
+				.btn-add-rule-blue {
+					background: var(--primary-blue);
+					color: #ffffff;
+					border: none;
+					border-radius: 6px;
+					padding: 8px 16px;
+					font-size: 13px;
+					font-weight: 600;
+					display: inline-flex;
+					align-items: center;
+					gap: 6px;
+					cursor: pointer;
+					transition: background-color 0.15s ease;
+					box-shadow: 0 1px 2px rgba(37,99,235,0.15);
+				}
+				.btn-add-rule-blue:hover {
+					background: var(--primary-blue-hover);
+				}
+				.date-input-wrap {
+					position: relative;
+					flex: 1;
+					min-width: 200px;
+				}
+				.date-input-wrap .date-icon {
+					position: absolute;
+					left: 12px;
+					top: 50%;
+					transform: translateY(-50%);
+					color: #94a3b8;
+					pointer-events: none;
+				}
+				.date-input-wrap input.text-field-input {
+					padding-left: 36px;
+					height: 40px;
+					font-size: 13px;
+				}
 			`}</style>
 
 			<div className="sticky-preview-header">
@@ -2950,6 +3226,28 @@ export function CustomizeBarPage() {
 						</div>
 						<div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
 							<span>Simulated device: <strong>{previewDevice === "desktop" ? "Desktop" : "Mobile (375px)"}</strong></span>
+							{config.entryEffect && config.entryEffect !== "none" && (
+								<button
+									type="button"
+									onClick={() => setPreviewEffectKey((k) => k + 1)}
+									style={{
+										background: "#eff6ff",
+										border: "1px solid #bfdbfe",
+										borderRadius: "4px",
+										padding: "2px 8px",
+										fontSize: "11px",
+										fontWeight: 600,
+										color: "var(--primary-blue)",
+										cursor: "pointer",
+										display: "inline-flex",
+										alignItems: "center",
+										gap: "4px",
+									}}
+									title="Replay Entry Effect animation in preview"
+								>
+									<span>Replay {config.entryEffect === "slide" ? "Slide in" : "Fade"} ↻</span>
+								</button>
+							)}
 							<button
 								type="button"
 								onClick={() => setPreviewCollapsed(!previewCollapsed)}
@@ -3004,7 +3302,8 @@ export function CustomizeBarPage() {
 								<>
 								{config.customCss && <style>{config.customCss}</style>}
 								<div
-									className={`announcement-bar-preview ${config.position === "bottom" ? "placement-bottom" : "placement-top"} smarter-annoucement-bar-front-container`}
+									key={`announcement-bar-preview-${config.entryEffect || "none"}-${config.position || "top"}-${previewEffectKey}`}
+									className={`announcement-bar-preview ${config.position === "bottom" ? "placement-bottom" : "placement-top"} entry-effect-${config.entryEffect || "none"} smarter-annoucement-bar-front-container`}
 									style={{
 										background:
 											config.backgroundType === "gradient"
@@ -5696,134 +5995,607 @@ export function CustomizeBarPage() {
 				{/* ======================================================== */}
 				{activeStep === 3 && (
 					<>
+						{/* Title Header Banner matching reference */}
+						<div className="step-banner-box">
+							<h1 className="step-banner-title">3. Display Rules</h1>
+						</div>
+
+						{/* Card 1: Triggers Rules */}
 						<div className="editor-card">
-							<h1 className="card-title blue-accent">3. Display Rules</h1>
+							<h2 className="card-title">Triggers Rules</h2>
 							<p className="card-subtitle">
-								Control exactly where, when, and to whom this announcement bar appears across your website.
+								The Display Rule controls how and when annoucnement bar appears based on Device, Entry Effect, and Trigger.
 							</p>
+							<hr className="card-divider" />
 
-							{/* Target Pages */}
+							{/* Row 1: Devices */}
 							<div className="form-row">
-								<label className="row-label-col" htmlFor="target-pages-select">
-									<HelpTooltip content="Select which pages across your website will display this announcement bar." />
-									<span>Target Pages</span>
-								</label>
-								<div className="row-control-col">
-									<select
-										id="target-pages-select"
-										className="text-field-select"
-										value={config.targetPages}
-										onChange={(e) => update("targetPages", e.target.value as any)}
-									>
-										<option value="all">All Pages</option>
-										<option value="homepage">Homepage Only</option>
-										<option value="custom">Specific URL Patterns</option>
-									</select>
-
-									{config.targetPages === "custom" && (
-										<div style={{ marginTop: "10px" }}>
-											<input
-												type="text"
-												className="text-field-input"
-												value={config.targetUrls}
-												onChange={(e) => update("targetUrls", e.target.value)}
-												placeholder="/products/*, /sale"
-											/>
-											<span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Separate multiple paths with commas. Wildcards (*) supported.</span>
-										</div>
-									)}
+								<div className="row-label-col">
+									<span>Devices</span>
 								</div>
-							</div>
-
-							{/* Target Devices */}
-							<div className="form-row">
-								<label className="row-label-col" htmlFor="target-devices-select">
-									<HelpTooltip content="Control whether to show the bar on all devices, desktop computers only, or mobile devices only." />
-									<span>Target Devices</span>
-								</label>
 								<div className="row-control-col">
-									<select
-										id="target-devices-select"
-										className="text-field-select"
-										value={config.targetDevices}
-										onChange={(e) => update("targetDevices", e.target.value as any)}
-									>
-										<option value="all">All Devices (Desktop & Mobile)</option>
-										<option value="desktop">Desktop Only</option>
-										<option value="mobile">Mobile Only</option>
-									</select>
-								</div>
-							</div>
-
-							{/* Target Visitors */}
-							<div className="form-row">
-								<label className="row-label-col" htmlFor="target-visitors-select">
-									<HelpTooltip content="Choose whether all visitors see the bar, first-time new visitors only, or returning visitors only." />
-									<span>Visitor Eligibility</span>
-								</label>
-								<div className="row-control-col">
-									<select
-										id="target-visitors-select"
-										className="text-field-select"
-										value={config.targetVisitors}
-										onChange={(e) => update("targetVisitors", e.target.value as any)}
-									>
-										<option value="all">All Visitors</option>
-										<option value="new">First-Time Visitors Only</option>
-										<option value="returning">Returning Visitors Only</option>
-									</select>
-								</div>
-							</div>
-
-							{/* Schedule Start / End */}
-							<div className="form-row">
-								<label className="row-label-col">
-									<HelpTooltip content="Optionally schedule start and end dates to automatically publish and unpublish the announcement bar." />
-									<span>Schedule Window</span>
-								</label>
-								<div className="row-control-col" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-									<div style={{ flex: 1, minWidth: "180px" }}>
-										<label htmlFor="schedule-start" style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
-											Start Date (Optional)
-										</label>
-										<input
-											id="schedule-start"
-											type="date"
-											className="text-field-input"
-											value={config.startDate}
-											onChange={(e) => update("startDate", e.target.value)}
-										/>
+									<div className="option-button-group" role="group" aria-label="Target Devices">
+										<button
+											type="button"
+											className={`option-pill-btn ${(config.devices || ["desktop", "mobile"]).includes("desktop") ? "selected" : ""}`}
+											onClick={() => toggleDisplayDevice("desktop")}
+											aria-pressed={(config.devices || ["desktop", "mobile"]).includes("desktop")}
+										>
+											<span>Desktop</span>
+											{(config.devices || ["desktop", "mobile"]).includes("desktop") && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
+										<button
+											type="button"
+											className={`option-pill-btn ${(config.devices || ["desktop", "mobile"]).includes("mobile") ? "selected" : ""}`}
+											onClick={() => toggleDisplayDevice("mobile")}
+											aria-pressed={(config.devices || ["desktop", "mobile"]).includes("mobile")}
+										>
+											<span>Mobile</span>
+											{(config.devices || ["desktop", "mobile"]).includes("mobile") && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
 									</div>
-									<div style={{ flex: 1, minWidth: "180px" }}>
-										<label htmlFor="schedule-end" style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
-											End Date (Optional)
+								</div>
+							</div>
+
+							{/* Row 2: Entry Effect */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<span>Entry Effect</span>
+								</div>
+								<div className="row-control-col">
+									<div className="option-button-group" role="radiogroup" aria-label="Entry Effect">
+										{[
+											{ value: "none", label: "No effect" },
+											{ value: "slide", label: "Slide in" },
+											{ value: "fade", label: "Fade" },
+										].map((effect) => {
+											const isSelected = (config.entryEffect || "none") === effect.value;
+											return (
+												<button
+													key={effect.value}
+													type="button"
+													className={`option-pill-btn ${isSelected ? "selected" : ""}`}
+													onClick={() => update("entryEffect", effect.value as any)}
+													role="radio"
+													aria-checked={isSelected}
+												>
+													<span>{effect.label}</span>
+													{isSelected && (
+														<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+													)}
+												</button>
+											);
+										})}
+									</div>
+								</div>
+							</div>
+
+							{/* Row 3: Trigger */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="Choose when the announcement bar should be triggered: after a specific number of seconds, or after the visitor scrolls down the page." />
+									<span>Trigger</span>
+								</div>
+								<div className="row-control-col">
+									<div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+										<button
+											type="button"
+											className={`option-pill-btn ${(config.triggerType || "seconds") === "seconds" ? "selected" : ""}`}
+											onClick={() => update("triggerType", "seconds")}
+											role="radio"
+											aria-checked={(config.triggerType || "seconds") === "seconds"}
+										>
+											<span>After a few seconds</span>
+											{(config.triggerType || "seconds") === "seconds" && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
+										<button
+											type="button"
+											className={`option-pill-btn ${config.triggerType === "scroll" ? "selected" : ""}`}
+											onClick={() => update("triggerType", "scroll")}
+											role="radio"
+											aria-checked={config.triggerType === "scroll"}
+										>
+											<span>After scroll</span>
+											{config.triggerType === "scroll" && (
+												<span className="pill-checkmark-badge"><Check size={11} weight="bold" /></span>
+											)}
+										</button>
+
+										{(config.triggerType || "seconds") === "seconds" && (
+											<div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+												<input
+													type="number"
+													min="0"
+													className="text-field-input"
+													style={{ width: "70px", height: "40px", textAlign: "center", padding: "0 8px" }}
+													value={config.triggerSeconds ?? 0}
+													onChange={(e) => update("triggerSeconds", Math.max(0, parseInt(e.target.value, 10) || 0))}
+												/>
+												<span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-main)" }}>Sec</span>
+											</div>
+										)}
+
+										{config.triggerType === "scroll" && (
+											<div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+												<input
+													type="number"
+													min="0"
+													max="100"
+													className="text-field-input"
+													style={{ width: "70px", height: "40px", textAlign: "center", padding: "0 8px" }}
+													value={config.triggerScrollPercentage ?? 50}
+													onChange={(e) => update("triggerScrollPercentage", Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)))}
+												/>
+												<span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-main)" }}>%</span>
+											</div>
+										)}
+									</div>
+								</div>
+							</div>
+						</div>
+
+						{/* Card 2: Targeting Rules */}
+						<div className="editor-card">
+							<h2 className="card-title">Targeting Rules</h2>
+							<p className="card-subtitle">
+								Show your announcement bar only to the visitors that fulfil your set targeting criteria.
+							</p>
+							<hr className="card-divider" />
+
+							{/* Row 1: Date Scheduling */}
+							<div className="form-row">
+								<label className="row-label-col" htmlFor="date-scheduling-tz">
+									<HelpTooltip content="Select the timezone used to evaluate and calculate all active date and time scheduling rules." />
+									<span>Date Scheduling</span>
+								</label>
+								<div className="row-control-col">
+									<select
+										id="date-scheduling-tz"
+										className="text-field-select"
+										style={{ maxWidth: "600px" }}
+										value={config.dateSchedulingTimezone || "Central African Republic/Bangui"}
+										onChange={(e) => update("dateSchedulingTimezone", e.target.value)}
+									>
+										<option value="Central African Republic/Bangui">Central African Republic/Bangui</option>
+										<option value="Eritrea/Asmara">Eritrea/Asmara</option>
+										<option value="UTC">UTC</option>
+										<option value="America/New_York">America/New_York (Eastern)</option>
+										<option value="America/Chicago">America/Chicago (Central)</option>
+										<option value="America/Denver">America/Denver (Mountain)</option>
+										<option value="America/Los_Angeles">America/Los_Angeles (Pacific)</option>
+										<option value="America/Toronto">America/Toronto</option>
+										<option value="America/Sao_Paulo">America/Sao_Paulo</option>
+										<option value="Europe/London">Europe/London (GMT/BST)</option>
+										<option value="Europe/Paris">Europe/Paris (CET)</option>
+										<option value="Europe/Berlin">Europe/Berlin</option>
+										<option value="Europe/Madrid">Europe/Madrid</option>
+										<option value="Europe/Rome">Europe/Rome</option>
+										<option value="Europe/Amsterdam">Europe/Amsterdam</option>
+										<option value="Europe/Moscow">Europe/Moscow</option>
+										<option value="Asia/Dubai">Asia/Dubai (GST)</option>
+										<option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+										<option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+										<option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+										<option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+										<option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
+										<option value="Australia/Sydney">Australia/Sydney (AEST)</option>
+										<option value="Australia/Melbourne">Australia/Melbourne</option>
+										<option value="Pacific/Auckland">Pacific/Auckland (NZST)</option>
+										<option value="Africa/Cairo">Africa/Cairo</option>
+										<option value="Africa/Johannesburg">Africa/Johannesburg</option>
+										<option value="Africa/Lagos">Africa/Lagos</option>
+										<option value="Africa/Nairobi">Africa/Nairobi</option>
+									</select>
+								</div>
+							</div>
+
+							{/* Row 2: Date Ranges */}
+							{config.dateRanges?.map((range, index) => (
+								<div className="form-row" key={range.id || index}>
+									<label className="row-label-col">
+										<HelpTooltip content="Define the start and end date/time window during which the announcement bar should be displayed." />
+										<span>Date Range {index + 1}</span>
+									</label>
+									<div className="row-control-col">
+										<div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", width: "100%", maxWidth: "680px" }}>
+											<div className="date-input-wrap">
+												<Clock size={16} weight="regular" className="date-icon" />
+												<input
+													type="text"
+													className="text-field-input"
+													placeholder="Select Start Date & Time"
+													value={range.start || ""}
+													onChange={(e) => handleUpdateDateRange(index, "start", e.target.value)}
+												/>
+												<input
+													type="datetime-local"
+													title="Choose start date and time"
+													style={{
+														position: "absolute",
+														right: "8px",
+														top: "50%",
+														transform: "translateY(-50%)",
+														opacity: 0,
+														width: "28px",
+														height: "28px",
+														cursor: "pointer",
+													}}
+													onChange={(e) => {
+														if (e.target.value) {
+															const formatted = e.target.value.replace("T", " ") + (e.target.value.length === 16 ? ":00" : "");
+															handleUpdateDateRange(index, "start", formatted);
+														}
+													}}
+												/>
+											</div>
+
+											<span style={{ fontWeight: 600, color: "#374151", fontSize: "12px", textTransform: "uppercase", userSelect: "none" }}>
+												TO
+											</span>
+
+											<div className="date-input-wrap">
+												<Clock size={16} weight="regular" className="date-icon" />
+												<input
+													type="text"
+													className="text-field-input"
+													placeholder="Select End Date & Time"
+													value={range.end || ""}
+													onChange={(e) => handleUpdateDateRange(index, "end", e.target.value)}
+												/>
+												<input
+													type="datetime-local"
+													title="Choose end date and time"
+													style={{
+														position: "absolute",
+														right: "8px",
+														top: "50%",
+														transform: "translateY(-50%)",
+														opacity: 0,
+														width: "28px",
+														height: "28px",
+														cursor: "pointer",
+													}}
+													onChange={(e) => {
+														if (e.target.value) {
+															const formatted = e.target.value.replace("T", " ") + (e.target.value.length === 16 ? ":00" : "");
+															handleUpdateDateRange(index, "end", formatted);
+														}
+													}}
+												/>
+											</div>
+
+											<button
+												type="button"
+												className="btn-icon-trash"
+												onClick={() => handleDeleteDateRange(index)}
+												title={`Delete Date Range ${index + 1}`}
+												aria-label={`Delete Date Range ${index + 1}`}
+											>
+												<Trash size={16} weight="bold" />
+											</button>
+										</div>
+									</div>
+								</div>
+							))}
+
+							{/* Add Date Rule Button */}
+							<div className="form-row" style={{ marginTop: "-8px", marginBottom: "22px" }}>
+								<div className="row-label-col" style={{ visibility: "hidden" }} />
+								<div className="row-control-col">
+									<button
+										type="button"
+										className="btn-add-rule-blue"
+										onClick={handleAddDateRange}
+									>
+										<PlusCircle size={16} weight="bold" />
+										<span>Add Date Rule</span>
+									</button>
+								</div>
+							</div>
+
+							{/* Row 3: Page Targeting */}
+							{config.pageRules?.map((rule, index) => (
+								<div className="form-row" key={rule.id || index}>
+									<div className="row-label-col" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
+										<div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+											<HelpTooltip content="Specify rules to determine which pages should show or hide this announcement bar." />
+											<span>Page Targeting</span>
+										</div>
+										<span style={{ fontSize: "12px", color: "var(--text-main)", fontWeight: 600 }}>Rule {index + 1}</span>
+									</div>
+									<div className="row-control-col">
+										<div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", width: "100%", maxWidth: "680px" }}>
+											<select
+												className="text-field-select"
+												style={{ width: "140px", flexShrink: 0 }}
+												value={rule.mode}
+												onChange={(e) => handleUpdatePageRule(index, "mode", e.target.value as any)}
+											>
+												<option value="show">Show on</option>
+												<option value="hide">Hide on</option>
+											</select>
+
+											<select
+												className="text-field-select"
+												style={{ minWidth: "170px", flex: 1 }}
+												value={rule.rule}
+												onChange={(e) => handleUpdatePageRule(index, "rule", e.target.value)}
+											>
+												<option value="select_rule">Select rule</option>
+												<option value="all">Everywhere (All Pages)</option>
+												<option value="homepage">Homepage Only</option>
+												<option value="contains">URL contains</option>
+												<option value="starts_with">URL starts with</option>
+												<option value="ends_with">URL ends with</option>
+												<option value="exact">URL exact match</option>
+											</select>
+
+											{["contains", "starts_with", "ends_with", "exact"].includes(rule.rule) && (
+												<input
+													type="text"
+													className="text-field-input"
+													style={{ minWidth: "150px", flex: 1 }}
+													placeholder="/products/*, /sale"
+													value={rule.value || ""}
+													onChange={(e) => handleUpdatePageRule(index, "value", e.target.value)}
+												/>
+											)}
+
+											<button
+												type="button"
+												className="btn-icon-trash"
+												onClick={() => handleDeletePageRule(index)}
+												title={`Delete Page Rule ${index + 1}`}
+												aria-label={`Delete Page Rule ${index + 1}`}
+											>
+												<Trash size={16} weight="bold" />
+											</button>
+										</div>
+									</div>
+								</div>
+							))}
+
+							{/* Add Page Rule Button */}
+							<div className="form-row" style={{ marginTop: "-8px", marginBottom: "22px" }}>
+								<div className="row-label-col" style={{ visibility: "hidden" }} />
+								<div className="row-control-col">
+									<button
+										type="button"
+										className="btn-add-rule-blue"
+										onClick={handleAddPageRule}
+									>
+										<PlusCircle size={16} weight="bold" />
+										<span>Add Page Rule</span>
+									</button>
+								</div>
+							</div>
+
+							{/* Row 4: User Targeting */}
+							<div className="form-row">
+								<label className="row-label-col" htmlFor="user-targeting-select">
+									<HelpTooltip content="Choose whether all website visitors see the bar, first-time new visitors only, or returning visitors only." />
+									<span>User Targeting</span>
+								</label>
+								<div className="row-control-col">
+									<select
+										id="user-targeting-select"
+										className="text-field-select"
+										style={{ maxWidth: "600px" }}
+										value={config.userTargeting || "all"}
+										onChange={(e) => update("userTargeting", e.target.value)}
+									>
+										<option value="all">Show for all users</option>
+										<option value="new">Only new visitors</option>
+										<option value="returning">Only returning visitors</option>
+										<option value="logged_in">Logged in users</option>
+										<option value="guest">Guest visitors</option>
+									</select>
+								</div>
+							</div>
+
+							{/* Row 5: Desktop OS And Browsers Targeting */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="Filter which desktop operating systems and web browsers are eligible to view the announcement bar." />
+									<span>Desktop OS And Browsers Targeting</span>
+								</div>
+								<div className="row-control-col">
+									<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", maxWidth: "600px", width: "100%" }}>
+										<div>
+											<label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+												Operating System
+											</label>
+											<select
+												className="text-field-select"
+												value={config.desktopOs || ""}
+												onChange={(e) => update("desktopOs", e.target.value)}
+											>
+												<option value="">Select Operating System</option>
+												<option value="all">All Operating Systems</option>
+												<option value="windows">Windows</option>
+												<option value="macos">macOS</option>
+												<option value="linux">Linux</option>
+												<option value="chromeos">Chrome OS</option>
+											</select>
+										</div>
+										<div>
+											<label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+												Browser
+											</label>
+											<select
+												className="text-field-select"
+												value={config.desktopBrowser || ""}
+												onChange={(e) => update("desktopBrowser", e.target.value)}
+											>
+												<option value="">Select Browser</option>
+												<option value="all">All Browsers</option>
+												<option value="chrome">Chrome</option>
+												<option value="safari">Safari</option>
+												<option value="firefox">Firefox</option>
+												<option value="edge">Edge</option>
+												<option value="opera">Opera</option>
+											</select>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Row 6: Mobile OS And Browsers Targeting */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="Filter which mobile operating systems and mobile browsers are eligible to view the announcement bar." />
+									<span>Mobile OS And Browsers Targeting</span>
+								</div>
+								<div className="row-control-col">
+									<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", maxWidth: "600px", width: "100%" }}>
+										<div>
+											<label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+												Operating System
+											</label>
+											<select
+												className="text-field-select"
+												value={config.mobileOs || ""}
+												onChange={(e) => update("mobileOs", e.target.value)}
+											>
+												<option value="">Select Operating System</option>
+												<option value="all">All Mobile OS</option>
+												<option value="ios">iOS</option>
+												<option value="android">Android</option>
+											</select>
+										</div>
+										<div>
+											<label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+												Browser
+											</label>
+											<select
+												className="text-field-select"
+												value={config.mobileBrowser || ""}
+												onChange={(e) => update("mobileBrowser", e.target.value)}
+											>
+												<option value="">Select Browser</option>
+												<option value="all">All Browsers</option>
+												<option value="safari">Safari Mobile</option>
+												<option value="chrome">Chrome Mobile</option>
+												<option value="samsung">Samsung Internet</option>
+												<option value="firefox">Firefox Mobile</option>
+											</select>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Row 7: Country Targeting */}
+							<div className="form-row">
+								<label className="row-label-col" htmlFor="country-targeting-select">
+									<HelpTooltip content="Restrict display of your announcement bar to visitors from specific countries." />
+									<span>Country Targeting</span>
+								</label>
+								<div className="row-control-col">
+									<select
+										id="country-targeting-select"
+										className="text-field-select"
+										style={{ maxWidth: "600px" }}
+										value={config.countryTargeting || ""}
+										onChange={(e) => update("countryTargeting", e.target.value)}
+									>
+										<option value="">Select a country</option>
+										<option value="all">All Countries</option>
+										<option value="US">United States</option>
+										<option value="GB">United Kingdom</option>
+										<option value="CA">Canada</option>
+										<option value="AU">Australia</option>
+										<option value="DE">Germany</option>
+										<option value="FR">France</option>
+										<option value="IN">India</option>
+										<option value="JP">Japan</option>
+										<option value="CF">Central African Republic</option>
+										<option value="BR">Brazil</option>
+										<option value="IT">Italy</option>
+										<option value="ES">Spain</option>
+										<option value="NL">Netherlands</option>
+										<option value="SE">Sweden</option>
+										<option value="NO">Norway</option>
+										<option value="DK">Denmark</option>
+										<option value="CH">Switzerland</option>
+										<option value="SG">Singapore</option>
+										<option value="AE">United Arab Emirates</option>
+										<option value="SA">Saudi Arabia</option>
+										<option value="ZA">South Africa</option>
+										<option value="MX">Mexico</option>
+										<option value="KR">South Korea</option>
+										<option value="CN">China</option>
+									</select>
+								</div>
+							</div>
+
+							{/* Row 8: Language Targeting */}
+							<div className="form-row">
+								<div className="row-label-col">
+									<HelpTooltip content="Enable language-based targeting to display the announcement bar according to the visitor's browser language." />
+									<span>Language Targeting</span>
+								</div>
+								<div className="row-control-col">
+									<div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+										<label className="switch-root" aria-label="Toggle Language Targeting">
+											<div className={`switch-track ${config.languageTargetingEnabled ? "on" : ""}`}>
+												<div className="switch-thumb" />
+											</div>
+											<span className="switch-label-text">{config.languageTargetingEnabled ? "ON" : "OFF"}</span>
+											<input
+												type="checkbox"
+												checked={Boolean(config.languageTargetingEnabled)}
+												onChange={(e) => update("languageTargetingEnabled", e.target.checked)}
+												style={{ display: "none" }}
+											/>
 										</label>
-										<input
-											id="schedule-end"
-											type="date"
-											className="text-field-input"
-											value={config.endDate}
-											onChange={(e) => update("endDate", e.target.value)}
-										/>
+
+										{config.languageTargetingEnabled && (
+											<div style={{ maxWidth: "600px", marginTop: "4px" }}>
+												<select
+													className="text-field-select"
+													value={(config.languageTargeting && config.languageTargeting[0]) || "en"}
+													onChange={(e) => update("languageTargeting", [e.target.value])}
+												>
+													<option value="en">English</option>
+													<option value="es">Spanish (Español)</option>
+													<option value="fr">French (Français)</option>
+													<option value="de">German (Deutsch)</option>
+													<option value="it">Italian (Italiano)</option>
+													<option value="pt">Portuguese (Português)</option>
+													<option value="zh">Chinese (中文)</option>
+													<option value="ja">Japanese (日本語)</option>
+													<option value="ko">Korean (한국어)</option>
+													<option value="ar">Arabic (العربية)</option>
+													<option value="hi">Hindi (हिन्दी)</option>
+													<option value="nl">Dutch (Nederlands)</option>
+													<option value="ru">Russian (Русский)</option>
+													<option value="sv">Swedish (Svenska)</option>
+												</select>
+											</div>
+										)}
 									</div>
 								</div>
 							</div>
 						</div>
 
 						{/* Bottom Navigation */}
-						<div className="bottom-nav-row">
-							<button type="button" className="btn-nav-prev" onClick={() => goToStep(2)}>
-								<ArrowLeft size={16} weight="bold" />
-								<span>Previous</span>
+						<div className="bottom-nav-row" style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+							<button type="button" className="btn-nav-blue" onClick={() => goToStep(2)}>
+								<span>← Previous</span>
 							</button>
 							<button
 								type="button"
-								className="btn-nav-next"
+								className="btn-nav-blue"
 								onClick={handlePublish}
 								disabled={status === "publishing"}
 							>
-								<PaperPlaneTilt size={15} weight="bold" />
-								<span>{status === "publishing" ? "Publishing..." : "Publish Bar"}</span>
+								<span>{status === "publishing" ? "Saving..." : "Save Bar"}</span>
 							</button>
 						</div>
 					</>

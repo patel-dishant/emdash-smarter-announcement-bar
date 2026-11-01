@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, utimesSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +37,14 @@ async function buildAdmin() {
 	const nativeContent = readFileSync(resolve(rootDir, "dist/native.mjs"), "utf-8");
 	writeFileSync(resolve(rootDir, "dist/index.mjs"), nativeContent, "utf-8");
 	console.log("✔ Compiled dist/native.mjs and dist/index.mjs with public page:fragments hook and publish route");
+
+	// Notify host app dev server if present
+	const astroConfig = resolve(rootDir, "..", "techlance-global", "astro.config.mjs");
+	if (existsSync(astroConfig)) {
+		const now = new Date();
+		utimesSync(astroConfig, now, now);
+		console.log("✔ Updated astro.config.mjs timestamp to trigger dev server reload");
+	}
 }
 
 buildAdmin().catch((err) => {
