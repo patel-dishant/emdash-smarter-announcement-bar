@@ -181,6 +181,51 @@ describe("admin pages", () => {
 		expect(nextResult).toMatchObject({
 			toast: { message: "Step 1 configuration saved! Proceeding to Customize Design.", type: "success" },
 		});
+
+		// Check clicking on third step tab: Display Rules
+		const displayRulesTabResult = await host.invokeRoute("admin", {
+			type: "block_action",
+			page: "/customize-bar",
+			action_id: "tab-display-rules",
+		});
+		expect(displayRulesTabResult).toMatchObject({
+			blocks: expect.arrayContaining([
+				expect.objectContaining({
+					type: "header",
+					text: "3. Display Rules",
+				}),
+				expect.objectContaining({
+					type: "form",
+					submit: expect.objectContaining({
+						action_id: "display-rules-save",
+						label: "Save Bar",
+					}),
+				}),
+			]),
+		});
+
+		// Check submitting step 3 Display Rules to save data
+		const saveDisplayRulesResult = await host.invokeRoute("admin", {
+			type: "form_submit",
+			page: "/customize-bar",
+			action_id: "display-rules-save",
+			values: {
+				devices: ["desktop", "mobile"],
+				entry_effect: "slide",
+				trigger_type: "seconds",
+				trigger_seconds: 5,
+				target_pages: "all",
+			},
+		});
+		expect(saveDisplayRulesResult).toMatchObject({
+			toast: { message: "Display Rules saved and announcement bar published successfully!", type: "success" },
+			blocks: expect.arrayContaining([
+				expect.objectContaining({
+					type: "header",
+					text: "3. Display Rules",
+				}),
+			]),
+		});
 	});
 
 	it("keeps the other plugin pages clearly marked as in development", async () => {

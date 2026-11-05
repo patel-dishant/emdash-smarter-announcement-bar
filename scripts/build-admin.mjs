@@ -41,9 +41,11 @@ async function buildAdmin() {
 	// Notify host app dev server if present
 	const astroConfig = resolve(rootDir, "..", "techlance-global", "astro.config.mjs");
 	if (existsSync(astroConfig)) {
-		const now = new Date();
-		utimesSync(astroConfig, now, now);
-		console.log("✔ Updated astro.config.mjs timestamp to trigger dev server reload");
+		try {
+			const now = new Date();
+			utimesSync(astroConfig, now, now);
+			console.log("✔ Updated astro.config.mjs timestamp to trigger dev server reload");
+		} catch {}
 	}
 }
 

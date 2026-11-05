@@ -160,6 +160,12 @@ export interface BarConfig {
 	endDate?: string;
 }
 
+export function getFutureDefaultTarget(daysAhead: number = 7): string {
+	const d = new Date(Date.now() + daysAhead * 86400000);
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 const DEFAULT_CONFIG: BarConfig = {
 	id: "bar_1",
 	views: 0,
@@ -189,7 +195,7 @@ const DEFAULT_CONFIG: BarConfig = {
 	buttonUrl: "",
 	appearanceAfterClick: "dont_show",
 	countdownEnabled: false,
-	countdownTarget: "2026-10-25 11:16:55",
+	countdownTarget: getFutureDefaultTarget(7),
 	countdownUrgencyText: "",
 	countdownTimezone: "Eritrea/Asmara",
 	countdownHideLabels: false,
@@ -817,26 +823,29 @@ function mergeDefaults(raw: any): BarConfig {
 	return {
 		...DEFAULT_CONFIG,
 		...raw,
-		devices: Array.isArray(raw.devices) && raw.devices.length > 0
+		devices: Array.isArray(raw.devices)
 			? raw.devices
 			: (raw.targetDevices === "desktop" ? ["desktop"] : raw.targetDevices === "mobile" ? ["mobile"] : DEFAULT_CONFIG.devices),
-		entryEffect: raw.entryEffect || DEFAULT_CONFIG.entryEffect,
-		triggerType: raw.triggerType || DEFAULT_CONFIG.triggerType,
+		entryEffect: raw.entryEffect !== undefined ? raw.entryEffect : DEFAULT_CONFIG.entryEffect,
+		triggerType: raw.triggerType !== undefined ? raw.triggerType : DEFAULT_CONFIG.triggerType,
 		triggerSeconds: raw.triggerSeconds ?? DEFAULT_CONFIG.triggerSeconds,
 		triggerScrollPercentage: raw.triggerScrollPercentage ?? DEFAULT_CONFIG.triggerScrollPercentage,
 		dateSchedulingTimezone: raw.dateSchedulingTimezone || DEFAULT_CONFIG.dateSchedulingTimezone,
-		dateRanges: Array.isArray(raw.dateRanges) && raw.dateRanges.length > 0
+		dateRanges: Array.isArray(raw.dateRanges)
 			? raw.dateRanges
 			: DEFAULT_CONFIG.dateRanges,
-		pageRules: Array.isArray(raw.pageRules) && raw.pageRules.length > 0
+		pageRules: Array.isArray(raw.pageRules)
 			? raw.pageRules
 			: DEFAULT_CONFIG.pageRules,
-		userTargeting: raw.userTargeting || DEFAULT_CONFIG.userTargeting,
+		userTargeting: raw.userTargeting !== undefined ? raw.userTargeting : DEFAULT_CONFIG.userTargeting,
 		desktopOs: raw.desktopOs ?? DEFAULT_CONFIG.desktopOs,
 		desktopBrowser: raw.desktopBrowser ?? DEFAULT_CONFIG.desktopBrowser,
 		mobileOs: raw.mobileOs ?? DEFAULT_CONFIG.mobileOs,
 		mobileBrowser: raw.mobileBrowser ?? DEFAULT_CONFIG.mobileBrowser,
 		countryTargeting: raw.countryTargeting ?? DEFAULT_CONFIG.countryTargeting,
+		countdownTarget: (!raw.countdownTarget || raw.countdownTarget === "2026-10-25 11:16:55")
+			? getFutureDefaultTarget(7)
+			: raw.countdownTarget,
 		languageTargetingEnabled: raw.languageTargetingEnabled ?? DEFAULT_CONFIG.languageTargetingEnabled,
 		languageTargeting: Array.isArray(raw.languageTargeting) ? raw.languageTargeting : DEFAULT_CONFIG.languageTargeting,
 	};
@@ -901,12 +910,13 @@ export function CustomizeBarPage() {
 	const [countdownRemaining, setCountdownRemaining] = useState({ days: "00", hours: "00", minutes: "00", seconds: "00" });
 	useEffect(() => {
 		const calc = () => {
-			if (!config.countdownTarget) {
-				setCountdownRemaining({ days: "00", hours: "00", minutes: "00", seconds: "00" });
-				return;
-			}
-			const target = new Date(config.countdownTarget.replace(" ", "T"));
-			const validTarget = !isNaN(target.getTime()) ? target : new Date(config.countdownTarget);
+			const targetVal = config.countdownTarget && config.countdownTarget !== "2026-10-25 11:16:55"
+				? config.countdownTarget
+				: getFutureDefaultTarget(7);
+			const targetStr = (targetVal || "").trim();
+			const isoStr = targetStr.includes("T") ? targetStr : targetStr.replace(" ", "T");
+			const target = new Date(isoStr);
+			const validTarget = !isNaN(target.getTime()) ? target : new Date(targetStr);
 			const diff = !isNaN(validTarget.getTime()) ? Math.max(0, validTarget.getTime() - Date.now()) : 0;
 			const s = Math.floor(diff / 1000);
 			const days = Math.floor(s / 86400);
@@ -1517,9 +1527,43 @@ export function CustomizeBarPage() {
 
 	const goToStep = (step: 1 | 2 | 3) => {
 		if (step > activeStep && !validateStep(activeStep)) {
-			setToast({ message: "Please fill in all required fields before continuing.", type: "error" });
+			const errs: Record<string, string> = {};
+			if (activeStep === 1) {
+				if (!config.name.trim()) errs.name = "Bar Name is required.";
+				if (!config.text.trim()) errs.text = "Announcement text is required.";
+				if (config.actionOnClick === "open_url" && !config.buttonUrl.trim()) {
+					errs.buttonUrl = "Button URL is required when Action is 'Redirect the visitor to another URL'.";
+				}
+			}
+			const firstErr = Object.values(errs)[0];
+			setToast({ message: firstErr || "Please fill in all required fields before continuing.", type: "error" });
 			return;
 		}
+
+		// Auto-persist draft to localStorage and sync to server draft so changes are preserved
+		try {
+			localStorage.setItem(STORAGE_KEY_DRAFT, JSON.stringify(config));
+			let barsList: BarConfig[] = [];
+			const savedBarsStr = localStorage.getItem(STORAGE_KEY_BARS);
+			if (savedBarsStr) {
+				barsList = JSON.parse(savedBarsStr);
+				const idx = barsList.findIndex((b) => (b.id && config.id && b.id === config.id) || b.name === config.name);
+				if (idx >= 0) {
+					barsList[idx] = { ...barsList[idx], ...config };
+				} else {
+					barsList.push(config);
+				}
+				localStorage.setItem(STORAGE_KEY_BARS, JSON.stringify(barsList));
+			} else {
+				barsList = [config];
+			}
+			fetch("/_emdash/api/plugins/smarter-announcement-bar/bars", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ bar: config, bars: barsList }),
+			}).catch(() => {});
+		} catch {}
+
 		setActiveStep(step);
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	};
@@ -1527,7 +1571,14 @@ export function CustomizeBarPage() {
 	const handlePublish = async () => {
 		if (!validateStep(1)) {
 			setActiveStep(1);
-			setToast({ message: "Validation error: Check Customize Bar fields.", type: "error" });
+			const errs: Record<string, string> = {};
+			if (!config.name.trim()) errs.name = "Bar Name is required.";
+			if (!config.text.trim()) errs.text = "Announcement text is required.";
+			if (config.actionOnClick === "open_url" && !config.buttonUrl.trim()) {
+				errs.buttonUrl = "Button URL is required when Action is 'Redirect the visitor to another URL'.";
+			}
+			const firstErr = Object.values(errs)[0];
+			setToast({ message: firstErr ? `Validation error: ${firstErr}` : "Validation error: Check Customize Bar fields.", type: "error" });
 			return;
 		}
 		setStatus("publishing");
@@ -1611,7 +1662,7 @@ export function CustomizeBarPage() {
 				await fetch("/_emdash/api/plugins/smarter-announcement-bar/bars", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ bars: barsList }),
+					body: JSON.stringify({ bar: toPublish, bars: barsList }),
 				});
 			} catch {}
 
@@ -1865,6 +1916,118 @@ export function CustomizeBarPage() {
 					border: 8px solid #1e293b;
 					border-radius: 28px;
 					box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-countdown,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-multi-row {
+					flex-direction: column !important;
+					align-items: center !important;
+					justify-content: center !important;
+					padding: 10px 32px 10px 14px !important;
+					gap: 8px !important;
+					position: relative !important;
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form .announcement-bar-content,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-countdown .announcement-bar-content,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-multi-row .announcement-bar-content {
+					flex-direction: column !important;
+					align-items: center !important;
+					text-align: center !important;
+					width: 100% !important;
+					gap: 6px !important;
+					overflow: visible !important;
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form .bar-static-content,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-countdown .bar-static-content,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-multi-row .bar-static-content {
+					text-align: center !important;
+					white-space: normal !important;
+					word-break: break-word !important;
+					font-size: 13px !important;
+					line-height: 1.35 !important;
+				}
+				.preview-viewport-frame.mobile .bar-text-group {
+					display: inline-flex !important;
+					flex-direction: row !important;
+					align-items: center !important;
+					justify-content: center !important;
+					gap: 8px !important;
+					max-width: 100% !important;
+				}
+				.preview-viewport-frame.mobile .bar-text-group .bar-icon-img {
+					width: 20px !important;
+					height: 20px !important;
+					max-height: 20px !important;
+					flex-shrink: 0 !important;
+					display: inline-block !important;
+					vertical-align: middle !important;
+				}
+				.preview-viewport-frame.mobile .preview-lead-form-wrap {
+					display: flex !important;
+					width: 100% !important;
+					margin-left: 0 !important;
+					gap: 6px !important;
+					align-items: center !important;
+					justify-content: center !important;
+				}
+				.preview-viewport-frame.mobile .preview-lead-form-wrap input {
+					flex: 1 !important;
+					min-width: 0 !important;
+					max-width: none !important;
+					font-size: 12px !important;
+					padding: 5px 8px !important;
+					height: 30px !important;
+					border-radius: 4px !important;
+					border: 1px solid rgba(0,0,0,0.2) !important;
+					background: rgba(255,255,255,0.95) !important;
+					box-sizing: border-box !important;
+				}
+				.preview-viewport-frame.mobile .preview-lead-form-wrap input[type="email"] {
+					flex: 1.4 !important;
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form .preview-close-btn,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-countdown .preview-close-btn,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-multi-row .preview-close-btn {
+					position: absolute !important;
+					top: 8px !important;
+					right: 8px !important;
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-countdown .preview-right-actions,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-multi-row .preview-right-actions {
+					display: flex !important;
+					align-items: center !important;
+					justify-content: center !important;
+					gap: 10px !important;
+					width: 100% !important;
+					flex-wrap: wrap !important;
+					position: static !important;
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form .preview-right-actions {
+					position: static !important;
+				}
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form .preview-lead-form-wrap .preview-cta-btn,
+				.preview-viewport-frame.mobile .announcement-bar-preview.has-lead-form .preview-lead-form-wrap .bar-cta-btn {
+					height: 30px !important;
+					padding: 0 12px !important;
+					font-size: 12px !important;
+					flex-shrink: 0 !important;
+					margin: 0 !important;
+					box-sizing: border-box !important;
+					line-height: 1 !important;
+				}
+				.preview-viewport-frame.mobile .smarter-countdown-digit-box {
+					font-size: 11px !important;
+					padding: 1px 3px !important;
+					min-width: 14px !important;
+					width: 14px !important;
+					height: 20px !important;
+				}
+				.preview-viewport-frame.mobile .smarter-countdown-colon {
+					height: 20px !important;
+					font-size: 11px !important;
+				}
+				.preview-viewport-frame.mobile .smarter-countdown-unit-label {
+					font-size: 9px !important;
 				}
 				.preview-mock-page {
 					padding: 10px 18px;
@@ -3303,7 +3466,7 @@ export function CustomizeBarPage() {
 								{config.customCss && <style>{config.customCss}</style>}
 								<div
 									key={`announcement-bar-preview-${config.entryEffect || "none"}-${config.position || "top"}-${previewEffectKey}`}
-									className={`announcement-bar-preview ${config.position === "bottom" ? "placement-bottom" : "placement-top"} entry-effect-${config.entryEffect || "none"} smarter-annoucement-bar-front-container`}
+									className={`announcement-bar-preview ${config.position === "bottom" ? "placement-bottom" : "placement-top"} entry-effect-${config.entryEffect || "none"} smarter-annoucement-bar-front-container ${config.leadFormEnabled ? "has-lead-form" : ""} ${config.countdownEnabled ? "has-countdown" : ""} ${config.leadFormEnabled || config.countdownEnabled ? "has-multi-row" : ""}`}
 									style={{
 										background:
 											config.backgroundType === "gradient"
@@ -3531,21 +3694,23 @@ export function CustomizeBarPage() {
 								) : (
 									<>
 										{Boolean(config.buttonPositionRelative && config.buttonPosition === "left") && renderPreviewCtaButton()}
-										{config.iconPosition !== "right" && renderPreviewIcon()}
-										<span
-											className="bar-static-content"
-											style={{
-												whiteSpace: "pre-wrap",
-												wordBreak: "break-word",
-												display: "inline-block",
-											}}
-											dangerouslySetInnerHTML={{
-												__html: config.text || ""
-											}}
-										/>
-										{config.iconPosition === "right" && renderPreviewIcon()}
+										<span className="bar-text-group" style={{ display: "inline-flex", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: "8px", verticalAlign: "middle", maxWidth: "100%" }}>
+											{config.iconPosition !== "right" && renderPreviewIcon()}
+											<span
+												className="bar-static-content"
+												style={{
+													whiteSpace: "pre-wrap",
+													wordBreak: "break-word",
+													display: "inline-block",
+												}}
+												dangerouslySetInnerHTML={{
+													__html: config.text || ""
+												}}
+											/>
+											{config.iconPosition === "right" && renderPreviewIcon()}
+										</span>
 										{config.leadFormEnabled && (
-											<div style={{ display: "inline-flex", gap: "6px", marginLeft: "12px", alignItems: "center" }}>
+											<div className="preview-lead-form-wrap" style={{ display: "inline-flex", gap: "6px", marginLeft: "12px", alignItems: "center" }}>
 												<input
 													id="preview-lead-name-input"
 													type="text"
@@ -3591,6 +3756,7 @@ export function CustomizeBarPage() {
 														maxWidth: "140px",
 													}}
 												/>
+												{renderPreviewCtaButton()}
 											</div>
 										)}
 										{/* If Set Position Relative To Text is enabled, render CTA button inline */}
@@ -3601,7 +3767,7 @@ export function CustomizeBarPage() {
 							)}
 
 							{/* Right Actions: Countdown Timer + CTA Button + Close Button */}
-							<div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+							<div className="preview-right-actions" style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
 								{config.countdownEnabled && (
 									<div className="smarter-countdown-root" style={{ display: "inline-flex", alignItems: "center", gap: "3px", userSelect: "none", color: config.textColor || "#000000" }}>
 										<div className="smarter-countdown-unit" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
@@ -3654,8 +3820,8 @@ export function CustomizeBarPage() {
 									</div>
 								)}
 
-								{/* Show CTA Button if device enabled, not inline, and not displaying thank you or revealed coupon state */}
-								{!config.buttonPositionRelative && renderPreviewCtaButton()}
+								{/* Show CTA Button if device enabled, not inline, not lead form (since lead form includes it inline), and not displaying thank you or revealed coupon state */}
+								{!config.buttonPositionRelative && !config.leadFormEnabled && renderPreviewCtaButton()}
 
 								{/* Show Close Icon if device enabled */}
 								{config.closeButtonDevices.includes(previewDevice) && (
@@ -4561,9 +4727,11 @@ export function CustomizeBarPage() {
 										onChange={(e) => {
 											const checked = e.target.checked;
 											const hadLeadForm = Boolean(config.leadFormEnabled);
+											const isExpired = !config.countdownTarget || config.countdownTarget === "2026-10-25 11:16:55" || new Date(config.countdownTarget.replace(" ", "T")).getTime() <= Date.now();
 											setConfig((prev) => ({
 												...prev,
 												countdownEnabled: checked,
+												countdownTarget: (checked && isExpired) ? getFutureDefaultTarget(7) : (prev.countdownTarget || getFutureDefaultTarget(7)),
 												leadFormEnabled: checked ? false : prev.leadFormEnabled,
 											}));
 											if (checked && hadLeadForm) {
@@ -4597,10 +4765,41 @@ export function CustomizeBarPage() {
 													type="text"
 													className="text-field-input"
 													style={{ paddingLeft: "36px" }}
-													value={config.countdownTarget ?? "2026-10-25 11:16:55"}
+													value={config.countdownTarget && config.countdownTarget !== "2026-10-25 11:16:55" ? config.countdownTarget : getFutureDefaultTarget(7)}
 													onChange={(e) => update("countdownTarget", e.target.value)}
-													placeholder="2026-10-25 11:16:55"
+													placeholder={getFutureDefaultTarget(7)}
 												/>
+											</div>
+											<div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap", alignItems: "center" }}>
+												<span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Quick presets:</span>
+												<button
+													type="button"
+													style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "14px", border: "1px solid var(--border-card)", background: "#ffffff", cursor: "pointer", color: "var(--text-main)" }}
+													onClick={() => update("countdownTarget", getFutureDefaultTarget(1))}
+												>
+													+24 Hours
+												</button>
+												<button
+													type="button"
+													style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "14px", border: "1px solid var(--border-card)", background: "#ffffff", cursor: "pointer", color: "var(--text-main)" }}
+													onClick={() => update("countdownTarget", getFutureDefaultTarget(3))}
+												>
+													+3 Days
+												</button>
+												<button
+													type="button"
+													style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "14px", border: "1px solid var(--border-card)", background: "#ffffff", cursor: "pointer", color: "var(--text-main)" }}
+													onClick={() => update("countdownTarget", getFutureDefaultTarget(7))}
+												>
+													+7 Days
+												</button>
+												<button
+													type="button"
+													style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "14px", border: "1px solid var(--border-card)", background: "#ffffff", cursor: "pointer", color: "var(--text-main)" }}
+													onClick={() => update("countdownTarget", getFutureDefaultTarget(30))}
+												>
+													+30 Days
+												</button>
 											</div>
 										</div>
 									</div>

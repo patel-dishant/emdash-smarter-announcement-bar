@@ -118,6 +118,12 @@ export interface BarConfig {
 	endDate?: string;
 }
 
+export function getFutureDefaultTarget(daysAhead: number = 7): string {
+	const d = new Date(Date.now() + daysAhead * 86400000);
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 const DEFAULT_CONFIG: BarConfig = {
 	id: "bar_1",
 	views: 0,
@@ -136,7 +142,7 @@ const DEFAULT_CONFIG: BarConfig = {
 	actionOnClick: "close",
 	barAppearanceAfterClick: "dont_show",
 	countdownEnabled: false,
-	countdownTarget: "2026-10-25 11:16:55",
+	countdownTarget: getFutureDefaultTarget(7),
 	countdownUrgencyText: "",
 	countdownTimezone: "Eritrea/Asmara",
 	countdownHideLabels: false,
@@ -252,11 +258,12 @@ export function getPublishedBars(): BarConfig[] {
 
 export function savePublishedBars(bars: BarConfig[]): void {
 	try {
-		writeFileSync(barsConfigFile, JSON.stringify(bars, null, 2), "utf-8");
-		const anyEnabled = bars.find((b) => b && b.enabled);
+		const sanitized = bars.map((b) => ({ ...DEFAULT_CONFIG, ...b }));
+		writeFileSync(barsConfigFile, JSON.stringify(sanitized, null, 2), "utf-8");
+		const anyEnabled = sanitized.find((b) => b && b.enabled);
 		const activeBar = anyEnabled
 			? anyEnabled
-			: { ...(bars[0] || DEFAULT_CONFIG), enabled: false };
+			: { ...(sanitized[0] || DEFAULT_CONFIG), enabled: false };
 		writeFileSync(configFile, JSON.stringify(activeBar, null, 2), "utf-8");
 	} catch (err) {
 		console.error("Failed to write published-bars.json:", err);
@@ -275,29 +282,35 @@ export function getPublishedConfig(): BarConfig {
 
 export function savePublishedConfig(config: BarConfig): void {
 	try {
+		const target: BarConfig = (config as any)?.bar && typeof (config as any).bar === "object"
+			? (config as any).bar
+			: config;
 		const bars = getPublishedBars();
-		const idx = bars.findIndex((b) => (b.id && config.id && b.id === config.id) || b.name === config.name);
+		const idx = bars.findIndex((b) => (b.id && target.id && b.id === target.id) || b.name === target.name);
 		if (idx >= 0) {
-			bars[idx] = { ...bars[idx], ...config };
-		} else if (config.id) {
-			bars.push(config);
+			bars[idx] = { ...DEFAULT_CONFIG, ...bars[idx], ...target };
+		} else if (target.id) {
+			bars.push({ ...DEFAULT_CONFIG, ...target });
 		} else {
 			if (bars.length > 0) {
-				bars[0] = { ...bars[0], ...config };
+				bars[0] = { ...DEFAULT_CONFIG, ...bars[0], ...target };
 			} else {
-				bars.push({ ...config, id: "bar_1" });
+				bars.push({ ...DEFAULT_CONFIG, ...target, id: "bar_1" });
 			}
 		}
-		if (config.enabled) {
+		if (target.enabled) {
 			bars.forEach((b) => {
-				if (b.id !== config.id && b.position === config.position) {
+				if (b.id !== target.id && b.position === target.position) {
 					b.enabled = false;
 				}
 			});
 		}
 		writeFileSync(barsConfigFile, JSON.stringify(bars, null, 2), "utf-8");
 		// Keep published-bar.json synced
-		const activeBar = config.enabled ? config : (bars.find((b) => b && b.enabled) || { ...config, enabled: false });
+		const anyEnabled = bars.find((b) => b && b.enabled);
+		const activeBar = target.enabled
+			? target
+			: (anyEnabled || (bars[0] ? { ...bars[0], enabled: false } : { ...DEFAULT_CONFIG, enabled: false }));
 		writeFileSync(configFile, JSON.stringify(activeBar, null, 2), "utf-8");
 	} catch (err) {
 		console.error("Failed to write published-bar.json:", err);
@@ -341,9 +354,14 @@ export function renderPublicBar(config: BarConfig): string {
 	const isButtonActive = Boolean((hasButtonDesktop || hasButtonMobile) && config.buttonText);
 	const isLeadFormActive = Boolean(anyConfig.leadFormEnabled && isButtonActive);
 	const isCountdownActive = Boolean(config.countdownEnabled && !isLeadFormActive);
+	const isMultiRowMobile = Boolean(isLeadFormActive || isCountdownActive);
+
+	const targetDateVal = (!anyConfig.countdownTarget || anyConfig.countdownTarget === "2026-10-25 11:16:55")
+		? getFutureDefaultTarget(7)
+		: anyConfig.countdownTarget;
 
 	const countdownHtml = isCountdownActive
-		? `<div id="${countdownDomId}" class="smarter-countdown-root" data-target="${anyConfig.countdownTarget || "2026-10-25 11:16:55"}" data-tz="${anyConfig.countdownTimezone || "Eritrea/Asmara"}">
+		? `<div id="${countdownDomId}" class="smarter-countdown-root" data-target="${targetDateVal}" data-tz="${anyConfig.countdownTimezone || "Eritrea/Asmara"}">
 				<div class="smarter-countdown-unit">
 					<div class="smarter-countdown-digits">
 						<span class="smarter-countdown-digit-box" data-unit="d0">0</span>
@@ -387,13 +405,6 @@ export function renderPublicBar(config: BarConfig): string {
 	);
 	const discountHtml = showDiscountRightaway ? couponBadgeHtml : "";
 
-	const leadFormHtml = (!showDiscountRightaway && isLeadFormActive)
-		? `<form id="${leadFormDomId}" class="smarter-lead-form" style="display: flex; gap: 6px; align-items: center; margin: 0 4px;" onsubmit="event.preventDefault(); handleSmarterLeadSubmit_${barIdClean}(this);">
-				<input type="text" id="smarter-lead-name-${barIdClean}" name="name" placeholder="${anyConfig.leadNamePlaceholder || "Enter your name"}" style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 120px;" />
-				<input type="email" id="smarter-lead-email-${barIdClean}" name="email" placeholder="${anyConfig.leadEmailPlaceholder || anyConfig.leadFormPlaceholder || "Enter your email address"}" required style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 160px;" />
-		   </form>`
-		: "";
-
 	const buttonDeviceClass = (!hasButtonDesktop && hasButtonMobile) ? "hide-on-desktop" : (hasButtonDesktop && !hasButtonMobile) ? "hide-on-mobile" : (!hasButtonDesktop && !hasButtonMobile) ? "hide-always" : "";
 
 	const isButtonInline = Boolean(config.buttonPositionRelative);
@@ -412,6 +423,14 @@ export function renderPublicBar(config: BarConfig): string {
 		  } !important; border: ${btnBorder}; border-radius: ${config.buttonBorderRadius ?? 1}px; padding: ${config.buttonPaddingTopBottom ?? 5}px ${config.buttonPaddingLeftRight ?? 12}px; font-weight: 600; font-size: ${config.buttonFontSizePx ?? 16}px; cursor: pointer; ${btnMargin}" onclick="handleSmarterBarCta_${barIdClean}()">${
 				config.buttonText
 		  }</button>`
+		: "";
+
+	const leadFormHtml = (!showDiscountRightaway && isLeadFormActive)
+		? `<form id="${leadFormDomId}" class="smarter-lead-form" style="display: inline-flex; gap: 6px; align-items: center; margin: 0 6px;" onsubmit="event.preventDefault(); handleSmarterLeadSubmit_${barIdClean}(this);">
+				<input type="text" id="smarter-lead-name-${barIdClean}" name="name" placeholder="${anyConfig.leadNamePlaceholder || "Enter your name"}" style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 120px;" />
+				<input type="email" id="smarter-lead-email-${barIdClean}" name="email" placeholder="${anyConfig.leadEmailPlaceholder || anyConfig.leadFormPlaceholder || "Enter your email address"}" required style="padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.95); color: #111; max-width: 160px;" />
+				${buttonHtml}
+		   </form>`
 		: "";
 
 	const hasCloseDesktop = config.closeButtonDevices ? config.closeButtonDevices.includes("desktop") : true;
@@ -725,13 +744,106 @@ export function renderPublicBar(config: BarConfig): string {
 		@media (max-width: 640px) {
 			.hide-on-mobile { display: none !important; }
 			#${barDomId}.smarter-announcement-bar-root {
-				flex-direction: column;
-				text-align: center;
-				gap: 8px;
+				flex-direction: ${isMultiRowMobile ? "column !important" : "row !important"};
+				align-items: center !important;
+				justify-content: ${isMultiRowMobile ? "center !important" : "space-between !important"};
+				gap: ${isMultiRowMobile ? "8px !important" : "8px !important"};
+				padding: ${isMultiRowMobile ? "10px 32px 10px 14px !important" : (config.padding === "compact" ? "4px 8px !important" : config.padding === "spacious" ? "10px 16px !important" : "6px 12px !important")};
 				font-size: ${config.mobileFontSizePx ? `${config.mobileFontSizePx}px` : "12px"};
+				position: relative !important;
+			}
+			#${barDomId} .smarter-content-container {
+				display: flex !important;
+				flex-direction: ${isMultiRowMobile ? "column !important" : "row !important"};
+				align-items: center !important;
+				justify-content: center !important;
+				text-align: center !important;
+				width: ${isMultiRowMobile ? "100% !important" : "auto"};
+				flex: 1;
+				min-width: 0;
+				gap: 6px !important;
+			}
+			#${barDomId} .smarter-static-text {
+				white-space: normal !important;
+				word-break: break-word !important;
+				text-align: center !important;
+				line-height: 1.35 !important;
+			}
+			#${barDomId} .smarter-text-group {
+				display: inline-flex !important;
+				flex-direction: row !important;
+				align-items: center !important;
+				justify-content: center !important;
+				gap: 8px !important;
+				max-width: 100% !important;
+			}
+			#${barDomId} .smarter-text-group img {
+				width: 20px !important;
+				height: 20px !important;
+				max-height: 20px !important;
+				flex-shrink: 0 !important;
+				display: inline-block !important;
+				vertical-align: middle !important;
+			}
+			#${barDomId} .smarter-bar-actions {
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				gap: 10px !important;
+				${isMultiRowMobile ? "width: 100% !important; flex-wrap: wrap !important;" : ""}
+			}
+			#${barDomId} .smarter-lead-form {
+				width: 100% !important;
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				gap: 6px !important;
+				margin: 0 !important;
+			}
+			#${barDomId} .smarter-lead-form input {
+				flex: 1 !important;
+				min-width: 0 !important;
+				max-width: none !important;
+				padding: 5px 8px !important;
+				font-size: 12px !important;
+				height: 30px !important;
+				border-radius: 4px !important;
+				border: 1px solid rgba(0,0,0,0.2) !important;
+				background: rgba(255,255,255,0.95) !important;
+				color: #111 !important;
+				box-sizing: border-box !important;
+			}
+			#${barDomId} .smarter-lead-form input[type="email"] {
+				flex: 1.4 !important;
 			}
 			#${barDomId} .smarter-cta-btn {
 				font-size: ${config.buttonMobileFontSizePx ? `${config.buttonMobileFontSizePx}px` : "12px"} !important;
+				padding: 5px 12px !important;
+				height: 30px !important;
+				line-height: 1 !important;
+				box-sizing: border-box !important;
+				white-space: nowrap !important;
+				flex-shrink: 0 !important;
+				margin: 0 !important;
+			}
+			#${barDomId} .smarter-close-btn {
+				${isMultiRowMobile ? "position: absolute !important; top: 8px !important; right: 8px !important;" : ""}
+				padding: 4px !important;
+				flex-shrink: 0 !important;
+			}
+			#${barDomId} .smarter-countdown-digit-box {
+				font-size: 11px !important;
+				padding: 1px 3px !important;
+				min-width: 14px !important;
+				width: 14px !important;
+				height: 20px !important;
+			}
+			#${barDomId} .smarter-countdown-colon {
+				height: 20px !important;
+				font-size: 11px !important;
+			}
+			#${barDomId} .smarter-countdown-unit-label {
+				font-size: 9px !important;
 			}
 		}
 
@@ -871,18 +983,20 @@ export function renderPublicBar(config: BarConfig): string {
 						${isButtonInline ? buttonHtml : ""}
 				   </div>`
 				: `<div class="smarter-content-container is-static">
-						${isIconRight ? "" : iconHtml}
 						${isButtonInline && buttonPos === "left" ? buttonHtml : ""}
-						<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${formatText(config.text || messages[0])}</span>
-						${isIconRight ? iconHtml : ""}
+						<span class="smarter-text-group" style="display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; vertical-align: middle; max-width: 100%;">
+							${isIconRight ? "" : iconHtml}
+							<span class="smarter-static-text" style="white-space: pre-wrap; word-break: break-word; display: inline-block;">${formatText(config.text || messages[0])}</span>
+							${isIconRight ? iconHtml : ""}
+						</span>
 						${discountHtml}
 						${leadFormHtml}
 						${isButtonInline && buttonPos !== "left" ? buttonHtml : ""}
 				   </div>`
 		}
-		<div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+		<div class="smarter-bar-actions" style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
 			${countdownHtml}
-			${isButtonInline ? "" : buttonHtml}
+			${isLeadFormActive ? "" : (isButtonInline ? "" : buttonHtml)}
 			${closeHtml}
 		</div>
 	</div>
@@ -1137,7 +1251,6 @@ export function renderPublicBar(config: BarConfig): string {
 					setTimeout(revealBar, 60);
 				}
 			}
-		})();
 
 			// Adjust bottom padding if needed
 			if (typeof window.recalcSmarterBottomPadding === 'function') {
@@ -1422,7 +1535,10 @@ export function createPlugin(options = {}) {
 				methods: ["POST"],
 				request: { body: "json" },
 				handler: async (routeCtx: any) => {
-					const input = routeCtx.input;
+					let input = routeCtx.input;
+					if (!input && routeCtx.request && typeof routeCtx.request.json === "function") {
+						try { input = await routeCtx.request.json(); } catch {}
+					}
 					if (input && typeof input === "object") {
 						if (input.event && input.barId) {
 							const { barId, event, lead } = input;
@@ -1469,7 +1585,8 @@ export function createPlugin(options = {}) {
 							savePublishedBars(input);
 							return { success: true, message: "Announcement bars published successfully" };
 						}
-						savePublishedConfig(input as BarConfig);
+						const target = (input.bar && typeof input.bar === "object") ? input.bar : input;
+						savePublishedConfig(target as BarConfig);
 						return { success: true, message: "Announcement bar published successfully" };
 					}
 					return { success: false, error: "Invalid configuration" };
@@ -1478,16 +1595,26 @@ export function createPlugin(options = {}) {
 			bars: {
 				public: true,
 				methods: ["GET", "POST"],
+				request: { body: "json" },
 				handler: async (routeCtx: any) => {
-					if (routeCtx.method === "POST" && routeCtx.input) {
-						const input = routeCtx.input;
+					let input = routeCtx.input;
+					if (!input && routeCtx.request && typeof routeCtx.request.json === "function") {
+						try { input = await routeCtx.request.json(); } catch {}
+					}
+					if (routeCtx.method === "POST" && input) {
 						if (Array.isArray(input)) {
 							savePublishedBars(input);
-							return { success: true, bars: input };
-						} else if (input && Array.isArray(input.bars)) {
+							return { success: true, bars: getPublishedBars() };
+						} else if (Array.isArray(input.bars)) {
 							savePublishedBars(input.bars);
-							return { success: true, bars: input.bars };
-						} else if (input && typeof input === "object") {
+							if (input.bar) {
+								savePublishedConfig(input.bar);
+							}
+							return { success: true, bars: getPublishedBars() };
+						} else if (input.bar && typeof input.bar === "object") {
+							savePublishedConfig(input.bar);
+							return { success: true, bars: getPublishedBars() };
+						} else if (typeof input === "object") {
 							savePublishedConfig(input as BarConfig);
 							return { success: true, bars: getPublishedBars() };
 						}
